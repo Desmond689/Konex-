@@ -13,7 +13,7 @@
     "type-check": "tsc --noEmit",
     "test": "jest --passWithNoTests",
     "format": "prettier --write \"**/*.{ts,tsx,js,json}\"",
-    "prepare": "husky install || true",
+    "prepare": "node -e \"process.exit(0)\"",
     "prebuild": "expo prebuild",
     "build:apk": "eas build -p android --profile preview --non-interactive",
     "build:prod": "eas build -p android --profile production --non-interactive"
@@ -25,7 +25,6 @@
     "@react-navigation/drawer": "^6.7.2",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
-    "@sentry/react-native": "^5.33.1",
     "@supabase/supabase-js": "^2.45.4",
     "@tanstack/react-query": "^5.56.2",
     "date-fns": "^3.6.0",
