@@ -1,0 +1,23 @@
+// src/api/services/index.ts
+export { authService } from './auth.service';
+export { userService } from './user.service';
+export { communityService } from './community.service';
+export { squadService } from './squad.service';
+export { postService } from './post.service';
+export { commentService } from './comment.service';
+export { likeService } from './like.service';
+export { storyService } from './story.service';
+export { lfgService } from './lfg.service';
+export { tournamentService } from './tournament.service';
+export { chatService } from './chat.service';
+export { notificationService } from './notification.service';
+export { badgeService } from './badge.service';
+export { followService } from './follow.service';
+export { friendService } from './friend.service';
+export { moderationService } from './moderation.service';
+export { reportService } from './report.service';
+export { appealService } from './appeal.service';
+export { adminService } from './admin.service';
+export { searchService } from './search.service';
+export { analyticsService } from './analytics.service';
+export { callService } from '../../features/calls/services/call.service';
