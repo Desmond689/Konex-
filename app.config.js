@@ -21,7 +21,7 @@ module.exports = ({ config }) => {
         'expo-build-properties',
         {
           android: {
-            compileSdkVersion: 35,
+            compileSdkVersion: 34,   // ← changed from 35 to 34
             targetSdkVersion: 34,
             minSdkVersion: 23,
             kotlinVersion: '1.9.23',
