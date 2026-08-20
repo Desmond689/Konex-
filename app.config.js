@@ -1,10 +1,3 @@
-/**
- * Dynamic Expo config for KONEX.
- *
- * Loads environment variables from .env
- * and merges them with the static configuration in app.json.
- */
-
 require('dotenv').config();
 
 const appJson = require('./app.json');
@@ -12,62 +5,39 @@ const appJson = require('./app.json');
 module.exports = ({ config }) => {
   const expo = appJson.expo || {};
 
+  const basePlugins = (expo.plugins || []).filter((p) => {
+    if (p === 'expo-build-properties') return false;
+    if (Array.isArray(p) && p[0] === 'expo-build-properties') return false;
+    if (typeof p === 'string' && p.includes('withAndroidBuildFixes')) return false;
+    return true;
+  });
+
   return {
     ...config,
     ...expo,
-
     plugins: [
-      ...(expo.plugins || []),
-
+      ...basePlugins,
       [
         'expo-build-properties',
         {
           android: {
-            compileSdkVersion: 34,
+            compileSdkVersion: 35,
             targetSdkVersion: 34,
-            kotlinVersion: "1.9.23",
             minSdkVersion: 23,
+            kotlinVersion: '1.9.23',
           },
         },
       ],
     ],
-
     extra: {
-      ...(config?.extra || {}),
+      ...(config && config.extra ? config.extra : {}),
       ...(expo.extra || {}),
-
-      supabaseUrl:
-        process.env.EXPO_PUBLIC_SUPABASE_URL || '',
-
-      supabaseAnonKey:
-        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-
-      sentryDsn:
-        process.env.EXPO_PUBLIC_SENTRY_DSN || '',
-
-      oneSignalAppId:
-        process.env.EXPO_PUBLIC_ONE_SIGNAL_APP_ID || '',
-
-      segmentWriteKey:
-        process.env.EXPO_PUBLIC_SEGMENT_WRITE_KEY || '',
-
-      environment:
-        process.env.EXPO_PUBLIC_ENVIRONMENT || 'development',
-
-      appVersion:
-        process.env.EXPO_PUBLIC_APP_VERSION ||
-        expo.version ||
-        '1.0.0',
-
-      appName:
-        process.env.EXPO_PUBLIC_APP_NAME ||
-        expo.name ||
-        'KONEX',
-
-      appScheme:
-        process.env.EXPO_PUBLIC_APP_SCHEME ||
-        expo.scheme ||
-        'konex',
+      eas: {
+        projectId: '98e59225-51dc-4c70-95dd-7293dee1b118',
+      },
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL || '',
+      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+      environment: process.env.EXPO_PUBLIC_ENVIRONMENT || 'development',
     },
   };
 };
