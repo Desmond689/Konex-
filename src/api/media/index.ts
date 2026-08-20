@@ -1,0 +1,32 @@
+/** Safe barrel - no duplicates */
+
+export type { VideoUploadProgress } from './apiVideo.service';
+export type { ApiVideoResult } from './apiVideo.service';
+export { MEDIA_MAX_BYTES } from './media.constants';
+export { MEDIA_MAX_VIDEO_DURATION_SEC } from './media.constants';
+export { MEDIA_TOO_LARGE_MESSAGE } from './media.constants';
+export { MEDIA_VIDEO_TOO_LONG_MESSAGE } from './media.constants';
+export { MEDIA_INVALID_TYPE_MESSAGE } from './media.constants';
+export { ALLOWED_IMAGE_MIME } from './media.constants';
+export { ALLOWED_VIDEO_MIME } from './media.constants';
+export { isSupportedImage } from './media.constants';
+export { isSupportedVideo } from './media.constants';
+export { isSupportedMedia } from './media.constants';
+export { getExtensionFromMime } from './media.constants';
+export type { MediaProcessingStatus } from './media.constants';
+export { default as MediaConstants } from './media.constants';
+export { MediaUploadService } from './mediaUpload.service';
+export { mediaUploadService } from './mediaUpload.service';
+export type { UploadProgress } from './mediaUpload.service';
+export type { MediaAssetRecord } from './mediaUpload.service';
+export type { VideoUploadResult } from './mediaUpload.service';
+export { getMimeTypeFromExtension } from './mediaValidate';
+export { isAllowedMime } from './mediaValidate';
+export { assertAllowedMime } from './mediaValidate';
+export { formatFileSize } from './mediaValidate';
+export { isFileSizeValid } from './mediaValidate';
+export { getMaxSizeMB } from './mediaValidate';
+export type { LocalMediaKind } from './mediaValidate';
+export type { LocalMediaValidationResult } from './mediaValidate';
+export type { GetFileInfoResult } from './mediaValidate';
+export { default as MediaValidate } from './mediaValidate';

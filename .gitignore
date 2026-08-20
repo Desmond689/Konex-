@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+.env
+.env.*
+.env.example
+*.log
+tsc-full.txt
+AppData/
+AppData
+**/AppData/**
+.DS_Store
+Thumbs.db

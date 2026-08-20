@@ -1,0 +1,4 @@
+/** Safe barrel */
+
+export { SearchScreen } from './SearchScreen';
+export type { SearchScreenProps } from './SearchScreen';

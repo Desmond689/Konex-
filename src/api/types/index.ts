@@ -1,0 +1,19 @@
+/** Safe barrel - no duplicates */
+
+export type { Json } from './database.types';
+export type { Database } from './database.types';
+export type { User } from './database.types';
+export type { UserInsert } from './database.types';
+export type { UserUpdate } from './database.types';
+export type { Community } from './database.types';
+export type { CommunityInsert } from './database.types';
+export type { CommunityUpdate } from './database.types';
+export type { Squad } from './database.types';
+export type { SquadInsert } from './database.types';
+export type { SquadUpdate } from './database.types';
+export type { Post } from './database.types';
+export type { PostInsert } from './database.types';
+export type { PostUpdate } from './database.types';
+export type { MediaAsset } from './db.aliases';
+export type { Appeal } from './db.aliases';
+export type { AnalyticsEvent } from './db.aliases';
