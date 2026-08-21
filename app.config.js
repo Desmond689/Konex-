@@ -8,7 +8,7 @@ module.exports = ({ config }) => {
   const basePlugins = (expo.plugins || []).filter((p) => {
     if (p === 'expo-build-properties') return false;
     if (Array.isArray(p) && p[0] === 'expo-build-properties') return false;
-    if (typeof p === 'string' && p.includes('withAndroidBuildFixes')) return false;
+    if (typeof p === 'string' && (p.includes('withAndroidBuildFixes') || p.includes('withMedia3Fix'))) return false;
     return true;
   });
 
@@ -17,6 +17,7 @@ module.exports = ({ config }) => {
     ...expo,
     plugins: [
       ...basePlugins,
+      './plugins/withMedia3Fix',
       [
         'expo-build-properties',
         {
