@@ -84,20 +84,5 @@
     "jest": "^29.7.0",
     "prettier": "^3.3.3",
     "typescript": "~5.3.3"
-  },
-  "overrides": {
-    "androidx.media3:media3-common": "1.4.1",
-    "androidx.media3:media3-exoplayer": "1.4.1",
-    "androidx.media3:media3-exoplayer-dash": "1.4.1",
-    "androidx.media3:media3-exoplayer-hls": "1.4.1",
-    "androidx.media3:media3-exoplayer-smoothstreaming": "1.4.1",
-    "androidx.media3:media3-datasource": "1.4.1",
-    "androidx.media3:media3-datasource-okhttp": "1.4.1",
-    "androidx.media3:media3-extractor": "1.4.1",
-    "androidx.media3:media3-container": "1.4.1",
-    "androidx.media3:media3-decoder": "1.4.1",
-    "androidx.media3:media3-database": "1.4.1",
-    "androidx.media3:media3-ui": "1.4.1",
-    "androidx.media3:media3-session": "1.4.1"
   }
 }
