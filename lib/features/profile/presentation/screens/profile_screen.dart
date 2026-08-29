@@ -342,166 +342,164 @@ class _Header extends ConsumerWidget {
           const SizedBox(height: 12),
           Column(
             children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(profile.displayName, style: AppTextStyles.headline),
-                    if (profile.isVerified) ...[
-                      const SizedBox(width: 4),
-                      const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
-                    ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(profile.displayName, style: AppTextStyles.headline),
+                  if (profile.isVerified) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 20),
                   ],
+                ],
+              ),
+              Text('@${profile.username}', style: AppTextStyles.bodySecondary),
+              if (profile.playerType != null)
+                Text('🎮 ${profile.playerType}', style: AppTextStyles.caption),
+              if (profile.showSquadTag(isMe, profile.isFollowing)) ...[
+                const SizedBox(height: 10),
+                _SquadTag(profile: profile),
+              ],
+              if (profile.bio != null && profile.bio!.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(profile.bio!, style: AppTextStyles.body, textAlign: TextAlign.center),
+              ],
+              if (profile.badges.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: profile.badges
+                      .map((b) => Chip(
+                            label: Text(b, style: AppTextStyles.caption),
+                            visualDensity: VisualDensity.compact,
+                          ))
+                      .toList(),
                 ),
-                Text('@${profile.username}', style: AppTextStyles.bodySecondary),
-                if (profile.playerType != null)
-                  Text('🎮 ${profile.playerType}', style: AppTextStyles.caption),
-                if (profile.showSquadTag(isMe, profile.isFollowing)) ...[
-                  const SizedBox(height: 10),
-                  _SquadTag(profile: profile),
-                ],
-                if (profile.bio != null && profile.bio!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Text(profile.bio!, style: AppTextStyles.body, textAlign: TextAlign.center),
-                ],
-                if (profile.badges.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 6,
-                    alignment: WrapAlignment.center,
-                    children: profile.badges
-                        .map((b) => Chip(
-                              label: Text(b, style: AppTextStyles.caption),
-                              visualDensity: VisualDensity.compact,
-                            ))
-                        .toList(),
+              ],
+              if (profile.country != null) ...[
+                const SizedBox(height: 6),
+                Text(profile.country!, style: AppTextStyles.caption),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  InkWell(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => FollowListScreen(
+                          userId: profile.id,
+                          mode: FollowListMode.followers,
+                        ),
+                      ),
+                    ),
+                    child: _Stat(label: 'Followers', value: profile.followerCount),
+                  ),
+                  const SizedBox(width: 28),
+                  InkWell(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => FollowListScreen(
+                          userId: profile.id,
+                          mode: FollowListMode.following,
+                        ),
+                      ),
+                    ),
+                    child: _Stat(label: 'Following', value: profile.followingCount),
                   ),
                 ],
-                if (profile.country != null) ...[
-                  const SizedBox(height: 6),
-                  Text(profile.country!, style: AppTextStyles.caption),
-                ],
-                const SizedBox(height: 14),
+              ),
+              const SizedBox(height: 14),
+              if (isMe)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    InkWell(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => FollowListScreen(
-                            userId: profile.id,
-                            mode: FollowListMode.followers,
-                          ),
-                        ),
+                    Expanded(
+                      child: KxButton(
+                        label: 'Edit profile',
+                        outlined: true,
+                        onPressed: () => context.push(Routes.editProfile),
                       ),
-                      child: _Stat(label: 'Followers', value: profile.followerCount),
                     ),
-                    const SizedBox(width: 28),
-                    InkWell(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => FollowListScreen(
-                            userId: profile.id,
-                            mode: FollowListMode.following,
-                          ),
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: KxButton(
+                        label: 'Share',
+                        outlined: true,
+                        onPressed: () => ShareService.shareProfile(context, profile.username),
                       ),
-                      child: _Stat(label: 'Following', value: profile.followingCount),
                     ),
                   ],
-                ),
-                const SizedBox(height: 14),
-                if (isMe)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: KxButton(
-                          label: 'Edit profile',
-                          outlined: true,
-                          onPressed: () => context.push(Routes.editProfile),
-                        ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: KxButton(
+                        label: profile.isFollowing ? 'Following' : 'Follow',
+                        onPressed: !profile.canFollow(false)
+                            ? null
+                            : () async {
+                                final social = ref.read(socialRepositoryProvider);
+                                if (profile.isFollowing) {
+                                  await social.unfollow(profile.id);
+                                } else {
+                                  await social.follow(profile.id);
+                                }
+                                ref.invalidate(profileByIdProvider(profile.id));
+                              },
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: KxButton(
-                          label: 'Share',
-                          outlined: true,
-                          onPressed: () => ShareService.shareProfile(context, profile.username),
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: KxButton(
-                          label: profile.isFollowing ? 'Following' : 'Follow',
-                          onPressed: !profile.canFollow(false)
-                              ? null
-                              : () async {
-                                  final social = ref.read(socialRepositoryProvider);
-                                  if (profile.isFollowing) {
-                                    await social.unfollow(profile.id);
-                                  } else {
-                                    await social.follow(profile.id);
-                                  }
-                                  ref.invalidate(profileByIdProvider(profile.id));
-                                },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: 'Voice call',
-                        icon: const Icon(Icons.call),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Voice call',
+                      icon: const Icon(Icons.call),
+                      onPressed: !profile.canMessage(false, profile.isFollowing)
+                          ? null
+                          : () async {
+                              final dm = await ref
+                                  .read(chatRepositoryProvider)
+                                  .getOrCreateDm(profile.id);
+                              if (!context.mounted) return;
+                              final convId = dm.valueOrNull;
+                              if (convId == null) return;
+                              await ref
+                                  .read(callControllerProvider.notifier)
+                                  .startDmCall(
+                                    conversationId: convId,
+                                    calleeId: profile.id,
+                                    calleeName:
+                                        profile.gamerName ?? profile.username,
+                                    calleeAvatar: profile.avatarUrl,
+                                  );
+                            },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: KxButton(
+                        label: 'Message',
+                        outlined: true,
                         onPressed: !profile.canMessage(false, profile.isFollowing)
                             ? null
                             : () async {
-                                final dm = await ref
+                                final r = await ref
                                     .read(chatRepositoryProvider)
                                     .getOrCreateDm(profile.id);
-                                if (!context.mounted) return;
-                                final convId = dm.valueOrNull;
-                                if (convId == null) return;
-                                await ref
-                                    .read(callControllerProvider.notifier)
-                                    .startDmCall(
-                                      conversationId: convId,
-                                      calleeId: profile.id,
-                                      calleeName:
-                                          profile.gamerName ?? profile.username,
-                                      calleeAvatar: profile.avatarUrl,
+                                r.when(
+                                  success: (cid) => context.push('/chat/$cid'),
+                                  failure: (e, _) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('$e')),
                                     );
+                                  },
+                                );
                               },
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: KxButton(
-                          label: 'Message',
-                          outlined: true,
-                          onPressed: !profile.canMessage(false, profile.isFollowing)
-                              ? null
-                              : () async {
-                                  final r = await ref
-                                      .read(chatRepositoryProvider)
-                                      .getOrCreateDm(profile.id);
-                                  r.when(
-                                    success: (cid) => context.push('/chat/$cid'),
-                                    failure: (e, _) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('$e')),
-                                      );
-                                    },
-                                  );
-                                },
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
-              ],
-            ),
-          ],
-        ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
