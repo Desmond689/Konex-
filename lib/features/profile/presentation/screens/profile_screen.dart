@@ -430,7 +430,7 @@ class _Header extends ConsumerWidget {
                       ),
                     ],
                   )
-                else ...[
+                else
                   Row(
                     children: [
                       Expanded(
@@ -497,7 +497,7 @@ class _Header extends ConsumerWidget {
                       ),
                     ],
                   ),
-                ],
+              ],
               ],
             ),
           ],
