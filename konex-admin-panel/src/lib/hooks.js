@@ -177,18 +177,27 @@ export async function fetchReportPreview(reportId) {
 }
 
 // ---------- users ----------
-export async function searchUsers(query) {
+export async function listUsers({ limit = 100, query = "" } = {}) {
   const q = query.trim().replace(/[%_,.]/g, " ").trim();
-  if (!q) return [];
-  const { data, error } = await supabase
+  let req = supabase
     .from("profiles")
     .select(
       "id, username, gamer_name, app_role, is_banned, is_restricted, is_verified, restricted_until, avatar_url, created_at"
     )
-    .or(`username.ilike.%${q}%,gamer_name.ilike.%${q}%`)
-    .limit(30);
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (q) {
+    req = req.or(`username.ilike.%${q}%,gamer_name.ilike.%${q}%`);
+  }
+
+  const { data, error } = await req;
   if (error) throw error;
   return data || [];
+}
+
+export async function searchUsers(query) {
+  return listUsers({ query, limit: 30 });
 }
 
 export async function fetchUserModerationContext(userId) {

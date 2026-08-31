@@ -5,6 +5,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { useToast } from "../components/Toast";
 import { useAuth, can } from "../lib/AuthContext";
 import {
+  listUsers,
   searchUsers,
   setUserRole,
   setUserVerified,
@@ -39,14 +40,11 @@ export default function Users() {
   const { showToast, ToastEl } = useToast();
 
   const runSearch = async (q) => {
-    if (q.trim().length < 2) {
-      setUsers([]);
-      return;
-    }
     setLoading(true);
     setError(null);
     try {
-      setUsers(await searchUsers(q));
+      const nextUsers = q.trim().length >= 2 ? await searchUsers(q) : await listUsers();
+      setUsers(nextUsers);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -56,10 +54,14 @@ export default function Users() {
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => runSearch(query), 400);
+    debounceRef.current = setTimeout(() => runSearch(query), 300);
     return () => clearTimeout(debounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  useEffect(() => {
+    runSearch("");
+  }, []);
 
   const openDetail = async (u) => {
     setDetailUser(u);
@@ -160,15 +162,14 @@ export default function Users() {
           <div className="state-block">
             <div className="spinner" />
           </div>
-        ) : query.trim().length < 2 ? (
-          <div className="state-block">
-            <div className="state-block-title">Search for a user</div>
-            <div className="state-block-sub">Type at least 2 characters to search.</div>
-          </div>
         ) : users.length === 0 ? (
           <div className="state-block">
-            <div className="state-block-title">No matches</div>
-            <div className="state-block-sub">No user matches "{query}".</div>
+            <div className="state-block-title">
+              {query.trim().length >= 2 ? "No matches" : "No users yet"}
+            </div>
+            <div className="state-block-sub">
+              {query.trim().length >= 2 ? `No user matches "${query}".` : "No users are available in the system yet."}
+            </div>
           </div>
         ) : (
           users.map((u) => {
