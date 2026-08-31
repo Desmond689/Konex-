@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +23,9 @@ class AuthGuard {
     // storage says "incomplete", check the server value and let it win —
     // then sync local storage so we don't pay this round trip every route
     // change.
+    // CRITICAL: this query MUST be time-bounded. Without a timeout the
+    // entire go_router redirect hangs forever on a slow/offline network,
+    // which leaves the user stuck on the splash screen indefinitely.
     if (loggedIn && !onboardingDone) {
       try {
         final client = ref.read(supabaseClientProvider);
@@ -30,7 +35,8 @@ class AuthGuard {
               .from('profiles')
               .select('onboarding_completed')
               .eq('id', uid)
-              .maybeSingle();
+              .maybeSingle()
+              .timeout(const Duration(seconds: 6));
           final serverDone = row?['onboarding_completed'] as bool? ?? false;
           if (serverDone) {
             onboardingDone = true;
@@ -38,8 +44,9 @@ class AuthGuard {
           }
         }
       } catch (_) {
-        // Offline or request failed — fall back to the local value so a
-        // network hiccup doesn't strand a logged-in user on a redirect loop.
+        // Offline, timeout, or request failed — fall back to the local value
+        // so a network hiccup doesn't strand a logged-in user on a redirect
+        // loop or freeze the splash screen.
       }
     }
 

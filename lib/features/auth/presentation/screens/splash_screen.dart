@@ -34,29 +34,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     await Future<void>.delayed(const Duration(milliseconds: 1100));
     if (!mounted) return;
 
-    final session = ref.read(sessionManagerProvider);
-    final valid = await session.validateSession();
+    try {
+      final session = ref.read(sessionManagerProvider);
+      // validateSession already has its own 8s timeout + clears bad sessions.
+      final valid = await session.validateSession();
 
-    if (!mounted) return;
-    if (!valid) {
-      context.go(Routes.login);
-      return;
+      if (!mounted) return;
+      if (!valid) {
+        context.go(Routes.login);
+        return;
+      }
+      // Don't decide onboarding-vs-home here — that decision already lives in
+      // AuthGuard.redirect(), which every navigation (including this one)
+      // passes through anyway. Always heading to home and letting AuthGuard
+      // reroute to onboarding only when the (server-checked) flag actually
+      // says incomplete keeps that decision in one place.
+      context.go(Routes.home);
+    } catch (_) {
+      // Any unexpected failure (e.g. provider not ready, storage error)
+      // must still leave the splash screen — otherwise the user is stuck
+      // forever. Prefer login as the safe fallback.
+      if (mounted) context.go(Routes.login);
     }
-    // Don't decide onboarding-vs-home here — that decision already lives in
-    // AuthGuard.redirect(), which every navigation (including this one)
-    // passes through anyway. Deciding it a second time, here, using only
-    // the local "onboarding done" flag, used to race that logic: this
-    // screen would send someone straight to onboarding on nothing more
-    // than a stale/reset local flag, while AuthGuard's version of the same
-    // check falls back to the server value first. Having two paths made
-    // that safety net inconsistent — someone who'd already finished
-    // onboarding could still get dropped back into the "choose your
-    // platform / pick your games" flow after a reinstall or a cleared app
-    // cache, purely because this screen's check ran without ever asking
-    // the server. Always heading to home and letting AuthGuard reroute to
-    // onboarding only when the (server-checked) flag actually says
-    // incomplete keeps that decision in one place.
-    context.go(Routes.home);
   }
 
   @override
