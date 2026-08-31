@@ -41,33 +41,58 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
 
   Future<void> _userActions(Map<String, dynamic> u) async {
     final id = u['id'] as String;
+    final isVerified = u['is_verified'] == true;
+    final myRoleResult = await ref.read(adminRepositoryProvider).myRole();
+    final myRole = myRoleResult.valueOrNull ?? 'user';
+
+    final tiles = <Widget>[];
+    // Same gating as Users.jsx's actionsFor(): "make_moderator" covers
+    // both the moderator promotion and the demotion-to-user option.
+    if (canStaff(myRole, 'make_moderator')) {
+      tiles.add(ListTile(
+        title: const Text('Make moderator'),
+        onTap: () => Navigator.pop(context, 'role:moderator'),
+      ));
+    }
+    if (canStaff(myRole, 'make_admin')) {
+      tiles.add(ListTile(
+        title: const Text('Make admin'),
+        onTap: () => Navigator.pop(context, 'role:admin'),
+      ));
+    }
+    if (canStaff(myRole, 'make_moderator')) {
+      tiles.add(ListTile(
+        title: const Text('Set user'),
+        onTap: () => Navigator.pop(context, 'role:user'),
+      ));
+    }
+    if (canStaff(myRole, 'verify_users')) {
+      tiles.add(ListTile(
+        leading: Icon(isVerified ? Icons.verified : Icons.verified_outlined),
+        title: Text(isVerified ? 'Remove verified badge' : 'Verify user'),
+        onTap: () => Navigator.pop(context, isVerified ? 'unverify' : 'verify'),
+      ));
+    }
+    if (canStaff(myRole, 'ban_users')) {
+      tiles.add(ListTile(
+        title: const Text('Ban'),
+        onTap: () => Navigator.pop(context, 'ban'),
+      ));
+      tiles.add(ListTile(
+        title: const Text('Restore'),
+        onTap: () => Navigator.pop(context, 'restore'),
+      ));
+    }
+
+    if (!mounted) return;
+    if (tiles.isEmpty) return;
+
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Make moderator'),
-              onTap: () => Navigator.pop(ctx, 'role:moderator'),
-            ),
-            ListTile(
-              title: const Text('Make admin'),
-              onTap: () => Navigator.pop(ctx, 'role:admin'),
-            ),
-            ListTile(
-              title: const Text('Set user'),
-              onTap: () => Navigator.pop(ctx, 'role:user'),
-            ),
-            ListTile(
-              title: const Text('Ban'),
-              onTap: () => Navigator.pop(ctx, 'ban'),
-            ),
-            ListTile(
-              title: const Text('Restore'),
-              onTap: () => Navigator.pop(ctx, 'restore'),
-            ),
-          ],
+          children: tiles,
         ),
       ),
     );
@@ -75,6 +100,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     final repo = ref.read(adminRepositoryProvider);
     if (action.startsWith('role:')) {
       await repo.setUserRole(id, action.split(':')[1]);
+    } else if (action == 'verify' || action == 'unverify') {
+      await repo.setUserVerified(id, action == 'verify');
     } else if (action == 'ban' || action == 'restore') {
       await repo.resolveReport(
         reportId: '00000000-0000-0000-0000-000000000000',
@@ -116,7 +143,15 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
                   u['app_role'] ?? 'user',
                 ].join(' · ');
                 return ListTile(
-                  title: Text('$name'),
+                  title: Row(
+                    children: [
+                      Flexible(child: Text('$name', overflow: TextOverflow.ellipsis)),
+                      if (u['is_verified'] == true) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.verified, size: 16, color: Colors.lightBlueAccent),
+                      ],
+                    ],
+                  ),
                   subtitle: Text('@${u['username']} · $flags', style: AppTextStyles.caption),
                   onTap: () => _userActions(u),
                 );

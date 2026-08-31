@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../providers/admin_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class AdminReportsScreen extends ConsumerWidget {
   const AdminReportsScreen({super.key});
@@ -76,7 +77,7 @@ class AdminReportsScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(openReportsProvider),
         ),
         data: (list) {

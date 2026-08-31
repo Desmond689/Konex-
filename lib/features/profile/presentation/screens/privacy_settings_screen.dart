@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../providers/profile_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class PrivacySettingsScreen extends ConsumerStatefulWidget {
   const PrivacySettingsScreen({super.key});
@@ -57,7 +58,7 @@ class _PrivacySettingsScreenState extends ConsumerState<PrivacySettingsScreen> {
         );
         Navigator.pop(context);
       },
-      failure: (e, _) => setState(() => _error = e.toString()),
+      failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
     );
   }
 

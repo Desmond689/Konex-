@@ -3,6 +3,8 @@ import '../../../../core/deep_links/share_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../social/presentation/report_dialog.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -10,8 +12,13 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../../../chat/presentation/providers/chat_provider.dart';
+import '../../../posts/presentation/providers/post_provider.dart';
+import '../../../posts/presentation/widgets/post_card.dart';
+import '../../../posts/presentation/widgets/composer_sheet.dart';
 import '../providers/squad_provider.dart';
 import '../../domain/entities/squad_entity.dart';
+import 'edit_squad_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class SquadDetailScreen extends ConsumerStatefulWidget {
   const SquadDetailScreen({super.key, required this.squadId});
@@ -73,6 +80,48 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
     );
   }
 
+  Future<void> _confirmDelete(SquadEntity squad) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete squad?'),
+        content: Text(
+          'Delete ${squad.name}? This removes all members and can\'t be undone. '
+          'Members will be notified.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final r = await ref.read(squadRepositoryProvider).deleteSquad(widget.squadId);
+    if (!mounted) return;
+    r.when(
+      success: (_) {
+        ref.invalidate(myActiveSquadProvider);
+        ref.invalidate(squadByIdProvider(widget.squadId));
+        context.go('/squads');
+      },
+      failure: (e, _) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      },
+    );
+  }
+
+  Future<void> _editSquad(SquadEntity squad) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => EditSquadScreen(squad: squad)),
+    );
+    if (changed == true) {
+      ref.invalidate(squadByIdProvider(widget.squadId));
+    }
+  }
+
   Future<void> _join(SquadEntity squad) async {
     final r = await ref.read(squadRepositoryProvider).requestJoin(widget.squadId);
     if (!mounted) return;
@@ -106,7 +155,7 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
       ),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
-        body: KxErrorView(message: e.toString()),
+        body: KxErrorView(message: ErrorHandler.userMessage(e)),
       ),
       data: (squad) {
         if (squad == null) {
@@ -140,8 +189,27 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
                     ),
                     PopupMenuButton<String>(
                       onSelected: (v) async {
+                        if (v == 'report') {
+                          final ok = await showReportDialog(
+                            context,
+                            targetType: 'squad',
+                            targetId: squad.id,
+                          );
+                          if (ok && context.mounted) {
+                            // snackbar already shown by dialog
+                          }
+                          return;
+                        }
                         if (v == 'leave') {
                           await _confirmLeave(squad);
+                          return;
+                        }
+                        if (v == 'edit') {
+                          await _editSquad(squad);
+                          return;
+                        }
+                        if (v == 'delete') {
+                          await _confirmDelete(squad);
                           return;
                         }
                         if (v == 'invite') {
@@ -166,12 +234,20 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
                       },
                       itemBuilder: (_) => [
                         const PopupMenuItem(value: 'invite', child: Text('Copy invite link')),
+                        const PopupMenuItem(value: 'report', child: Text('Report squad')),
                         if (!squad.isOwner)
                           const PopupMenuItem(value: 'leave', child: Text('Leave squad')),
                         if (squad.isOwner)
                           const PopupMenuItem(
                             value: 'transfer',
                             child: Text('Transfer ownership (Members tab)'),
+                          ),
+                        if (squad.isOwner)
+                          const PopupMenuItem(value: 'edit', child: Text('Edit squad')),
+                        if (squad.isOwner)
+                          const PopupMenuItem(
+                            value: 'delete',
+                            child: Text('Delete squad', style: TextStyle(color: Colors.redAccent)),
                           ),
                       ],
                     ),
@@ -225,9 +301,9 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
                     tabs: const [
                       Tab(text: 'Home'),
                       Tab(text: 'Posts'),
-                      Tab(text: 'Chat'),
                       Tab(text: 'Members'),
                       Tab(text: 'About'),
+                      Tab(text: 'Chat'),
                     ],
                   ),
                 ),
@@ -235,11 +311,15 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
               body: TabBarView(
                 controller: _tabs,
                 children: [
-                  _HomeTab(squad: squad, squadId: widget.squadId),
+                  _HomeTab(
+                    squad: squad,
+                    squadId: widget.squadId,
+                    onSeeAllPosts: () => _tabs?.animateTo(1),
+                  ),
                   _PostsTab(squad: squad, squadId: widget.squadId, memberMode: true),
-                  _ChatTab(squadId: widget.squadId, onOpenChat: _openChat),
                   _MembersTab(squad: squad, squadId: widget.squadId),
                   _AboutTab(squad: squad, nonMember: false),
+                  _ChatTab(squadId: widget.squadId, onOpenChat: _openChat),
                 ],
               ),
             ),
@@ -337,37 +417,185 @@ class _SquadDetailScreenState extends ConsumerState<SquadDetailScreen>
 }
 
 class _HomeTab extends ConsumerWidget {
-  const _HomeTab({required this.squad, required this.squadId});
+  const _HomeTab({required this.squad, required this.squadId, required this.onSeeAllPosts});
   final SquadEntity squad;
   final String squadId;
+  final VoidCallback onSeeAllPosts;
+
+  Future<void> _createPost(BuildContext context, WidgetRef ref) async {
+    final created = await showCreatePostSheet(
+      context,
+      origin: ComposerOrigin.squad,
+      destinationId: squadId,
+      destinationName: squad.name,
+      destinationAvatarUrl: squad.logoUrl,
+      destinationSubtitle: '${squad.memberCount} members · ${squad.isPublic ? 'Public' : 'Private'}',
+    );
+    if (created == true) ref.invalidate(squadPostFeedProvider(squadId));
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final postsAsync = ref.watch(squadPostsProvider(squadId));
+    final postsAsync = ref.watch(squadPostFeedProvider(squadId));
+
     return postsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => KxErrorView(message: e.toString()),
+      error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
       data: (posts) {
-        final announcements =
-            posts.where((p) => p['is_announcement'] == true).toList();
-        final rest = posts.where((p) => p['is_announcement'] != true).take(10);
+        final highlight = posts.where((p) => p.isAnnouncement).isNotEmpty
+            ? posts.firstWhere((p) => p.isAnnouncement)
+            : null;
+        final latest = posts.take(3).toList();
 
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            if (announcements.isNotEmpty) ...[
-              Text('📢 Announcements', style: AppTextStyles.title),
-              ...announcements.map((p) => _PostTile(map: p)),
-              const Divider(),
+        return RefreshIndicator(
+          onRefresh: () async => ref.invalidate(squadPostFeedProvider(squadId)),
+          color: AppColors.primary,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.groups_outlined,
+                      label: 'Members',
+                      value: '${squad.memberCount}',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _StatCard(
+                      icon: squad.isPublic ? Icons.public : Icons.lock_outline,
+                      label: 'Privacy',
+                      value: squad.isPublic ? 'Public' : 'Private',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text('About ${squad.name}', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                (squad.description?.isNotEmpty ?? false)
+                    ? squad.description!
+                    : 'This squad hasn\'t added a description yet.',
+                style: AppTextStyles.bodySecondary,
+              ),
+              if (highlight != null) ...[
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Highlights', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                    TextButton(
+                      onPressed: onSeeAllPosts,
+                      child: const Text('See all'),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.emoji_events_outlined, color: AppColors.primary, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(highlight.body ?? '', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, fontSize: 13)),
+                            const SizedBox(height: 2),
+                            Text(_relativeTime(highlight.createdAt), style: AppTextStyles.caption),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Latest Posts', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                  TextButton(
+                    onPressed: onSeeAllPosts,
+                    child: const Text('See all'),
+                  ),
+                ],
+              ),
+              if (latest.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No posts yet', style: AppTextStyles.caption),
+                )
+              else
+                ...latest.map((p) => PostCard(key: ValueKey(p.id), post: p)),
+              const SizedBox(height: 12),
+              KxButton(label: 'Create Post', onPressed: () => _createPost(context, ref)),
+              const SizedBox(height: 24),
             ],
-            Text('Latest', style: AppTextStyles.title),
-            if (rest.isEmpty)
-              Text('No posts yet', style: AppTextStyles.caption)
-            else
-              ...rest.map((p) => _PostTile(map: p)),
-          ],
+          ),
         );
       },
+    );
+  }
+}
+
+String _relativeTime(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({required this.icon, required this.label, required this.value});
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.textSecondary, size: 18),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, fontSize: 14)),
+              Text(label, style: AppTextStyles.caption.copyWith(fontSize: 11)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -387,72 +615,46 @@ class _PostsTab extends ConsumerStatefulWidget {
 }
 
 class _PostsTabState extends ConsumerState<_PostsTab> {
-  List<Map<String, dynamic>> _posts = [];
-  bool _loading = true;
+  String _filter = 'all';
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
+  Future<void> _createPost() async {
+    final created = await showCreatePostSheet(
+      context,
+      origin: ComposerOrigin.squad,
+      destinationId: widget.squadId,
+      destinationName: widget.squad.name,
+      destinationAvatarUrl: widget.squad.logoUrl,
+      destinationSubtitle: '${widget.squad.memberCount} members · ${widget.squad.isPublic ? 'Public' : 'Private'}',
+    );
+    if (created == true) ref.invalidate(squadPostFeedProvider(widget.squadId));
   }
 
-  Future<void> _load() async {
-    final r = await ref.read(squadRepositoryProvider).squadPosts(widget.squadId);
-    if (!mounted) return;
-    setState(() {
-      _posts = r.valueOrNull ?? [];
-      _loading = false;
-    });
-  }
-
-  Future<void> _compose({bool announcement = false}) async {
-    final controller = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(announcement ? 'Announcement' : 'Squad post'),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: 'Write something...'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Post')),
-        ],
-      ),
+  Future<void> _createAnnouncement() async {
+    final created = await showCreateAnnouncementSheet(
+      context,
+      origin: ComposerOrigin.squad,
+      destinationId: widget.squadId,
+      destinationName: widget.squad.name,
+      destinationAvatarUrl: widget.squad.logoUrl,
+      destinationSubtitle: '${widget.squad.memberCount} members · ${widget.squad.isPublic ? 'Public' : 'Private'}',
     );
-    if (ok != true || controller.text.trim().isEmpty) return;
-    final r = await ref.read(squadRepositoryProvider).createSquadPost(
-          squadId: widget.squadId,
-          body: controller.text.trim(),
-          announcement: announcement,
-        );
-    r.when(
-      success: (_) => _load(),
-      failure: (e, _) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      },
-    );
+    if (created == true) ref.invalidate(squadPostFeedProvider(widget.squadId));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    final postsAsync = ref.watch(squadPostFeedProvider(widget.squadId));
+
     return Column(
       children: [
-        if (widget.memberMode)
+        if (widget.memberMode) ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => _compose(announcement: false),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.surfaceElevated,
-                      foregroundColor: AppColors.textPrimary,
-                    ),
+                  child: OutlinedButton.icon(
+                    onPressed: _createPost,
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     label: const Text('Create Post'),
                   ),
@@ -461,7 +663,7 @@ class _PostsTabState extends ConsumerState<_PostsTab> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: FilledButton.icon(
-                      onPressed: () => _compose(announcement: true),
+                      onPressed: _createAnnouncement,
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
@@ -474,39 +676,53 @@ class _PostsTabState extends ConsumerState<_PostsTab> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                for (final f in const [
+                  ('all', 'All'),
+                  ('text', 'Discussion'),
+                  ('announcement', 'Announcement'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(f.$2),
+                      selected: _filter == f.$1,
+                      onSelected: (_) => setState(() => _filter = f.$1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
         Expanded(
-          child: _posts.isEmpty
-              ? Center(child: Text('No posts', style: AppTextStyles.caption))
-              : ListView.builder(
-                  itemCount: _posts.length,
-                  itemBuilder: (_, i) => _PostTile(map: _posts[i]),
+          child: postsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
+            data: (posts) {
+              final filtered = switch (_filter) {
+                'announcement' => posts.where((p) => p.isAnnouncement).toList(),
+                'text' => posts.where((p) => !p.isAnnouncement).toList(),
+                _ => posts,
+              };
+              if (filtered.isEmpty) {
+                return Center(child: Text('No posts', style: AppTextStyles.caption));
+              }
+              return RefreshIndicator(
+                onRefresh: () async => ref.invalidate(squadPostFeedProvider(widget.squadId)),
+                color: AppColors.primary,
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) => PostCard(key: ValueKey(filtered[i].id), post: filtered[i]),
                 ),
+              );
+            },
+          ),
         ),
       ],
-    );
-  }
-}
-
-class _PostTile extends StatelessWidget {
-  const _PostTile({required this.map});
-  final Map<String, dynamic> map;
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = map['profiles'] as Map<String, dynamic>?;
-    final name = (profile?['gamer_name'] as String?)?.isNotEmpty == true
-        ? profile!['gamer_name'] as String
-        : profile?['username'] as String? ?? 'User';
-    final isAnn = map['is_announcement'] == true;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        title: Text(
-          isAnn ? '📢 $name' : name,
-          style: AppTextStyles.title.copyWith(fontSize: 14),
-        ),
-        subtitle: Text(map['body'] as String? ?? ''),
-      ),
     );
   }
 }
@@ -523,7 +739,7 @@ class _MembersTab extends ConsumerWidget {
 
     return membersAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => KxErrorView(message: e.toString()),
+      error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
       data: (allMembers) {
         final members = allMembers.where((m) => m.status == 'active').toList();
 
@@ -676,7 +892,7 @@ class _ChatTab extends StatelessWidget {
             Text('Squad Chat', style: AppTextStyles.title),
             const SizedBox(height: 8),
             Text(
-              'Real-time messages with your squad.\nImages, reactions & more coming soon.',
+              'Real-time messages with your squad —\nimages, reactions, and more.',
               textAlign: TextAlign.center,
               style: AppTextStyles.caption,
             ),

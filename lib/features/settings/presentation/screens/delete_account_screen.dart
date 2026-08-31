@@ -7,6 +7,7 @@ import '../../../../core/router/routes.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_text_field.dart';
+import '../../../../core/errors/error_handler.dart';
 
 /// Apple / GDPR in-app account deletion.
 class DeleteAccountScreen extends ConsumerStatefulWidget {
@@ -52,7 +53,7 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = ErrorHandler.userMessage(e);
         _loading = false;
       });
     }

@@ -71,7 +71,19 @@ class _VideoPostPlayerState extends State<VideoPostPlayer> {
         }
       });
     } else {
-      _controller?.pause();
+      // Fully release the controller rather than just pausing it. Pausing
+      // alone leaves the native video decoder allocated for as long as this
+      // widget stays mounted, which for a feed means every video the user
+      // has ever scrolled past keeps a decoder alive at once — mobile
+      // devices only have a handful of hardware decoders, so a long
+      // scrolling session could exhaust them (silent playback failures, or
+      // a crash on some devices). Re-fetching on next scroll-into-view costs
+      // a re-buffer, which is a fair trade for not leaking decoders.
+      final c = _controller;
+      _controller = null;
+      _initialized = false;
+      c?.dispose();
+      if (mounted) setState(() {});
     }
   }
 

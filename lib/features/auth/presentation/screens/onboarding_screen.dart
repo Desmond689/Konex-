@@ -30,22 +30,45 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     setState(() => _saving = true);
     final client = ref.read(supabaseClientProvider);
     final user = client.auth.currentUser;
-    if (user != null) {
-      await client.from('profiles').update({
-        'player_type': _platform,
-        'onboarding_completed': true,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', user.id);
+    try {
+      if (user != null) {
+        // The completion flag is the critical write — it's what both this
+        // screen and the router's onboarding gate key off of. Let a failure
+        // here surface (below) so the user can retry rather than silently
+        // treating onboarding as done.
+        await client.from('profiles').update({
+          'player_type': _platform,
+          'onboarding_completed': true,
+          'updated_at': DateTime.now().toIso8601String(),
+        }).eq('id', user.id);
 
-      // Auto-join each selected game community (no fake data — real RPC)
-      await ref
-          .read(communityRepositoryProvider)
-          .joinMany(_selectedCommunityIds.toList());
+        // Auto-join each selected game community — best-effort. This used
+        // to run unguarded before the completion flag was ever considered
+        // "done" locally: one failed join (network blip, a since-deleted
+        // game id) threw, which skipped marking onboarding complete
+        // entirely and left the Continue button spinning forever with no
+        // way out except force-quitting the app. A join failing shouldn't
+        // block someone from finishing setup — they can add games anytime
+        // from Manage Games.
+        try {
+          await ref
+              .read(communityRepositoryProvider)
+              .joinMany(_selectedCommunityIds.toList());
+        } catch (_) {
+          // Non-fatal — proceed to completion regardless.
+        }
+      }
+
+      await ref.read(localStorageProvider).setOnboardingDone(true);
+      if (!mounted) return;
+      context.go(Routes.home);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not finish setup: $e')),
+      );
     }
-
-    await ref.read(localStorageProvider).setOnboardingDone(true);
-    if (!mounted) return;
-    context.go(Routes.home);
   }
 
   @override

@@ -154,6 +154,7 @@ class ChatRemoteDataSource {
 
       String? title;
       String? otherUserId;
+      String? avatarUrl;
       if (conv['type'] == 'dm') {
         final others = await _client
             .from('conversation_participants')
@@ -168,6 +169,7 @@ class ChatRemoteDataSource {
           title = (profile?['gamer_name'] as String?)?.isNotEmpty == true
               ? profile!['gamer_name'] as String
               : profile?['username'] as String? ?? 'User';
+          avatarUrl = profile?['avatar_url'] as String?;
         }
       } else if (conv['type'] == 'group') {
         title = (conv['title'] as String?)?.isNotEmpty == true
@@ -176,10 +178,11 @@ class ChatRemoteDataSource {
       } else if (conv['squad_id'] != null) {
         final squad = await _client
             .from('squads')
-            .select('name')
+            .select('name, logo_url')
             .eq('id', conv['squad_id'])
             .maybeSingle();
         title = squad?['name'] as String? ?? 'Squad chat';
+        avatarUrl = squad?['logo_url'] as String?;
       }
 
       final unread = (p['unread_count'] as int?) ?? 0;
@@ -188,6 +191,7 @@ class ChatRemoteDataSource {
         type: conv['type'] as String,
         squadId: conv['squad_id'] as String?,
         title: title,
+        avatarUrl: avatarUrl,
         otherUserId: otherUserId,
         lastMessage: lastMsg?['body'] as String?,
         lastMessageAt: lastMsg != null

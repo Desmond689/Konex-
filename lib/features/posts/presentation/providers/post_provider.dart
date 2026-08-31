@@ -7,6 +7,7 @@ import '../../data/datasources/post_remote_data_source.dart';
 import '../../data/repositories/post_repository_impl.dart';
 import '../../domain/entities/post_entity.dart';
 import '../../domain/repositories/post_repository.dart';
+import '../../../../core/errors/error_handler.dart';
 
 final postRemoteProvider = Provider<PostRemoteDataSource>((ref) {
   return PostRemoteDataSource(ref.watch(supabaseClientProvider));
@@ -14,6 +15,24 @@ final postRemoteProvider = Provider<PostRemoteDataSource>((ref) {
 
 final postRepositoryProvider = Provider<PostRepository>((ref) {
   return PostRepositoryImpl(ref.watch(postRemoteProvider));
+});
+
+/// Posts for a single squad (pinned announcements first), as [PostEntity]s
+/// so they render with the shared [PostCard]. Refresh with
+/// `ref.invalidate(squadPostFeedProvider(squadId))` after creating a post.
+/// (Named distinctly from `squad_provider.dart`'s raw-map `squadPostsProvider`.)
+final squadPostFeedProvider =
+    FutureProvider.family<List<PostEntity>, String>((ref, squadId) async {
+  final result = await ref.watch(postRepositoryProvider).getSquadPosts(squadId);
+  return result.when(success: (v) => v, failure: (e, _) => throw e);
+});
+
+/// Posts for a single community (pinned announcements first), as [PostEntity]s.
+/// Refresh with `ref.invalidate(communityPostFeedProvider(communityId))`.
+final communityPostFeedProvider =
+    FutureProvider.family<List<PostEntity>, String>((ref, communityId) async {
+  final result = await ref.watch(postRepositoryProvider).getCommunityPosts(communityId);
+  return result.when(success: (v) => v, failure: (e, _) => throw e);
 });
 
 class FeedState {
@@ -96,7 +115,7 @@ class FeedController extends StateNotifier<FeedState> {
         );
       },
       failure: (e, _) =>
-          state = state.copyWith(loading: false, error: e.toString()),
+          state = state.copyWith(loading: false, error: ErrorHandler.userMessage(e)),
     );
   }
 
@@ -115,7 +134,7 @@ class FeedController extends StateNotifier<FeedState> {
         );
       },
       failure: (e, _) =>
-          state = state.copyWith(loadingMore: false, error: e.toString()),
+          state = state.copyWith(loadingMore: false, error: ErrorHandler.userMessage(e)),
     );
   }
 
@@ -168,6 +187,28 @@ class FeedController extends StateNotifier<FeedState> {
       list[idx] = post;
       state = state.copyWith(posts: list);
     }
+  }
+
+  /// Pushes like/comment-count/like-state changes made elsewhere (e.g. a
+  /// [PostCard] rendered from a squad, profile, or saved-posts screen that
+  /// isn't backed by this feed's own list) into this provider's copy of the
+  /// post, so the home feed doesn't show stale numbers on next visit.
+  /// No-ops if the post isn't part of this feed's current page.
+  void syncPostFields(
+    String postId, {
+    int? likeCount,
+    int? commentCount,
+    bool? likedByMe,
+  }) {
+    final idx = state.posts.indexWhere((p) => p.id == postId);
+    if (idx < 0) return;
+    final list = [...state.posts];
+    list[idx] = list[idx].copyWith(
+      likeCount: likeCount,
+      commentCount: commentCount,
+      likedByMe: likedByMe,
+    );
+    state = state.copyWith(posts: list);
   }
 
   Future<void> deletePost(String postId) async {

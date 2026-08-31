@@ -20,6 +20,9 @@ class PostEntity extends Equatable {
     this.shareCount = 0,
     this.likedByMe = false,
     this.savedByMe = false,
+    this.isAnnouncement = false,
+    this.isPinned = false,
+    this.authorSquadRole,
     required this.createdAt,
   });
 
@@ -41,7 +44,10 @@ class PostEntity extends Equatable {
   final int shareCount;
   final bool likedByMe;
   final bool savedByMe;
-  final DateTime createdAt;
+  final bool isAnnouncement;
+  final bool isPinned;
+  /// Role of the author within [squadId], when known ('owner' | 'moderator' | 'member').
+  final String? authorSquadRole;
 
   String get authorDisplay =>
       (authorGamerName?.isNotEmpty == true) ? authorGamerName! : authorUsername;
@@ -55,11 +61,27 @@ class PostEntity extends Equatable {
     return '👤 Profile';
   }
 
+  /// Chip label for post-type badges (LFG / Tip / Event) used by squad & community feeds.
+  String? get typeBadgeLabel {
+    switch (postType) {
+      case 'lfg':
+        return 'LFG';
+      case 'tip':
+        return 'Tip';
+      case 'event':
+        return 'Event';
+      default:
+        return null;
+    }
+  }
+
   PostEntity copyWith({
     int? likeCount,
     int? commentCount,
+    int? shareCount,
     bool? likedByMe,
     bool? savedByMe,
+    bool? isPinned,
   }) {
     return PostEntity(
       id: id,
@@ -80,12 +102,16 @@ class PostEntity extends Equatable {
       shareCount: shareCount,
       likedByMe: likedByMe ?? this.likedByMe,
       savedByMe: savedByMe ?? this.savedByMe,
+      isAnnouncement: isAnnouncement,
+      isPinned: isPinned ?? this.isPinned,
+      authorSquadRole: authorSquadRole,
       createdAt: createdAt,
     );
   }
 
   @override
-  List<Object?> get props => [id, likeCount, likedByMe, savedByMe, commentCount];
+  List<Object?> get props =>
+      [id, likeCount, likedByMe, savedByMe, commentCount, isPinned];
 }
 
 class CommentEntity extends Equatable {

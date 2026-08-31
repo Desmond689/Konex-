@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -33,6 +34,12 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   bool _someoneTyping = false;
   DateTime? _otherLastRead;
   RealtimeChannel? _typingChannel;
+  // Populated only for DM conversations — resolved from the other
+  // participant's real profile, never a placeholder name.
+  String? _otherUserId;
+  String? _otherAvatarUrl;
+  DateTime? _otherLastSeen;
+  Timer? _presencePoll;
 
 
   static const _emojis = ['👍', '❤️', '🔥', '😂', '😮', '🎮'];
@@ -86,12 +93,62 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               .eq('id', conv['squad_id'])
               .maybeSingle();
           setState(() => _title = s?['name'] as String? ?? 'Squad Chat');
+        } else if (conv['type'] == 'dm') {
+          // DMs never get a stored title — the header must be the other
+          // participant's real name, not a generic fallback.
+          await _loadOtherParticipant(client);
         } else {
           setState(() => _title = conv['title'] as String? ?? 'Chat');
         }
       }
     } catch (_) {}
   }
+
+  Future<void> _loadOtherParticipant(SupabaseClient client) async {
+    final me = client.auth.currentUser?.id;
+    final parts = await client
+        .from('conversation_participants')
+        .select(
+            'user_id, profiles!conversation_participants_user_id_fkey(username, gamer_name, avatar_url, last_seen)')
+        .eq('conversation_id', widget.conversationId);
+    for (final r in parts as List) {
+      final row = r as Map;
+      if (row['user_id'] == me) continue;
+      final p = row['profiles'] as Map?;
+      final name = (p?['gamer_name'] as String?)?.isNotEmpty == true
+          ? p!['gamer_name'] as String
+          : (p?['username'] as String? ?? 'User');
+      if (!mounted) return;
+      setState(() {
+        _title = name;
+        _otherUserId = row['user_id'] as String?;
+        _otherAvatarUrl = p?['avatar_url'] as String?;
+        _otherLastSeen =
+            p?['last_seen'] != null ? DateTime.tryParse(p!['last_seen'] as String) : null;
+      });
+      break;
+    }
+    // Real presence, refreshed while this screen is open — same threshold
+    // as ProfileEntity.isOnline / StoryRing.isOnline (2 minutes since the
+    // other user's app last heartbeat via PresenceService).
+    _presencePoll?.cancel();
+    _presencePoll = Timer.periodic(const Duration(seconds: 30), (_) async {
+      final uid = _otherUserId;
+      if (uid == null || !mounted) return;
+      final row = await client
+          .from('profiles')
+          .select('last_seen')
+          .eq('id', uid)
+          .maybeSingle();
+      if (!mounted) return;
+      final seen = row?['last_seen'] != null ? DateTime.tryParse(row!['last_seen'] as String) : null;
+      setState(() => _otherLastSeen = seen);
+    });
+  }
+
+  bool get _otherIsOnline =>
+      _otherLastSeen != null &&
+      DateTime.now().toUtc().difference(_otherLastSeen!.toUtc()) < const Duration(minutes: 2);
 
   void _scrollToEnd() {
     if (!_scroll.hasClients) return;
@@ -156,6 +213,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
 
   Future<void> _react(MessageEntity m, String emoji) async {
     await ref.read(chatRepositoryProvider).reactToMessage(m.id, emoji);
+    if (!mounted) return;
     setState(() {
       final idx = _messages.indexWhere((x) => x.id == m.id);
       if (idx < 0) return;
@@ -181,6 +239,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   Future<void> _toggleMute() async {
     final next = !_muted;
     await ref.read(chatRepositoryProvider).setConversationMuted(widget.conversationId, next);
+    if (!mounted) return;
     setState(() => _muted = next);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -192,6 +251,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   Future<void> _pinMessage(MessageEntity m) async {
     final next = !m.pinned;
     await ref.read(chatRepositoryProvider).pinMessage(m.id, next);
+    if (!mounted) return;
     setState(() {
       final idx = _messages.indexWhere((x) => x.id == m.id);
       if (idx < 0) return;
@@ -268,6 +328,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   void dispose() {
     _channel?.unsubscribe();
     _typingChannel?.unsubscribe();
+    _presencePoll?.cancel();
     try {
       ref.read(chatRepositoryProvider).sendTyping(widget.conversationId, false);
     } catch (_) {}
@@ -331,13 +392,65 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(_title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            Text(
-              'Tap & hold a message for reactions',
-              style: AppTextStyles.caption.copyWith(fontSize: 11),
+            if (_otherUserId != null) ...[
+              GestureDetector(
+                onTap: () => context.push('/user/$_otherUserId'),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AppColors.surfaceElevated,
+                      backgroundImage:
+                          _otherAvatarUrl != null ? NetworkImage(_otherAvatarUrl!) : null,
+                      child: _otherAvatarUrl == null
+                          ? Text(_title.isNotEmpty ? _title[0].toUpperCase() : '?')
+                          : null,
+                    ),
+                    if (_otherIsOnline)
+                      Positioned(
+                        right: -1,
+                        bottom: -1,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF22C55E),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.background, width: 1.5),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _title,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    _otherUserId != null
+                        ? (_otherIsOnline ? 'Online' : 'Tap & hold a message for reactions')
+                        : 'Tap & hold a message for reactions',
+                    style: AppTextStyles.caption.copyWith(
+                      fontSize: 11,
+                      color: _otherUserId != null && _otherIsOnline
+                          ? const Color(0xFF22C55E)
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -550,14 +663,46 @@ class _MessageBubble extends StatelessWidget {
     final m = message;
     return Align(
       alignment: m.isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!m.isMine) ...[
+            GestureDetector(
+              onTap: onTapAvatar,
+              child: CircleAvatar(
+                radius: 14,
+                backgroundColor: AppColors.surfaceElevated,
+                backgroundImage: m.senderAvatar != null
+                    ? NetworkImage(m.senderAvatar!)
+                    : null,
+                child: m.senderAvatar == null
+                    ? Text(
+                        m.senderName.isNotEmpty
+                            ? m.senderName[0].toUpperCase()
+                            : '?',
+                        style: const TextStyle(fontSize: 12),
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Flexible(child: _bubbleBody(context, m)),
+        ],
+      ),
+    );
+  }
+
+  Widget _bubbleBody(BuildContext context, MessageEntity m) {
+    return GestureDetector(
         onLongPress: onLongPress,
-        onTap: onTapAvatar,
+        onTap: m.isMine ? null : onTapAvatar,
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 3),
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
           constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.78,
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
           ),
           decoration: BoxDecoration(
             color: m.isMine ? AppColors.primary : AppColors.surfaceElevated,
@@ -656,7 +801,6 @@ class _MessageBubble extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 }

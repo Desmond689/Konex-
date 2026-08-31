@@ -7,6 +7,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../../domain/entities/post_entity.dart';
 import '../widgets/post_card.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class PostDetailScreen extends ConsumerStatefulWidget {
   const PostDetailScreen({super.key, required this.postId});
@@ -89,7 +90,7 @@ class _PostDetailScreenState extends ConsumerState<PostDetailScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHandler.userMessage(e);
         _loading = false;
       });
     }

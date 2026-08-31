@@ -9,6 +9,7 @@ import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../providers/lfg_provider.dart';
 import 'create_lfg_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class LfgScreen extends ConsumerStatefulWidget {
   const LfgScreen({super.key, this.initialGame});
@@ -60,7 +61,7 @@ class _LfgScreenState extends ConsumerState<LfgScreen> {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(openLfgProvider(_gameFilter)),
         ),
         data: (list) {

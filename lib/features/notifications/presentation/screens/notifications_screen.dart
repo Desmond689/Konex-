@@ -12,6 +12,7 @@ import '../../../../core/widgets/kx_error_view.dart';
 import '../../domain/notification_entity.dart';
 import '../providers/notification_provider.dart';
 import 'notification_settings_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class NotificationsScreen extends ConsumerStatefulWidget {
   const NotificationsScreen({super.key});
@@ -142,7 +143,7 @@ class _List extends ConsumerWidget {
     return async.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => KxErrorView(
-        message: e.toString(),
+        message: ErrorHandler.userMessage(e),
         onRetry: () => ref.invalidate(notificationsListProvider),
       ),
       data: (all) {

@@ -75,5 +75,10 @@ class AuthRepositoryImpl with BaseRepository implements AuthRepository {
   }
 
   @override
+  Future<Result<void>> updatePassword(String newPassword) {
+    return guard(() => _remote.updatePassword(newPassword));
+  }
+
+  @override
   Stream<AuthUserEntity?> authStateChanges() => _remote.authStateChanges();
 }

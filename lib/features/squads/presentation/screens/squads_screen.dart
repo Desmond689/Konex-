@@ -8,6 +8,7 @@ import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../providers/squad_provider.dart';
 import 'create_squad_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 /// Squads tab: if user has a squad → open it immediately.
 /// Otherwise show Discover + Create only (no multi-squad list).
@@ -32,7 +33,7 @@ class _SquadsScreenState extends ConsumerState<SquadsScreen> {
       error: (e, _) => Scaffold(
         appBar: AppBar(title: const Text('Squads')),
         body: KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(myActiveSquadProvider),
         ),
       ),
@@ -85,7 +86,7 @@ class _DiscoverScaffold extends StatelessWidget {
       body: discover.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(squadsDiscoverProvider(null)),
         ),
         data: (list) {

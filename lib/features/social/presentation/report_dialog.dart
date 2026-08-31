@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/kx_button.dart';
 import 'social_provider.dart';
+import '../../../core/errors/error_handler.dart';
 
 const kReportReasons = [
   'Spam',
@@ -68,7 +69,7 @@ class _ReportDialogState extends ConsumerState<_ReportDialog> {
       },
       failure: (e, _) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e')),
+          SnackBar(content: Text(ErrorHandler.userMessage(e))),
         );
       },
     );

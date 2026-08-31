@@ -54,11 +54,18 @@ class _BiometricSettingsTileState extends ConsumerState<BiometricSettingsTile> {
       onChanged: (v) async {
         final gate = BiometricGate(ref.read(secureStorageProvider));
         if (v) {
-          final ok = await gate.requireUnlock(reason: 'Enable biometric lock');
+          // Confirm with a real Face ID / fingerprint prompt before turning
+          // this on. requireUnlock() can't be used here — it checks whether
+          // the lock is already enabled, which it isn't yet, so it would
+          // return true instantly without ever prompting.
+          final ok = await gate.authenticateNow(reason: 'Enable biometric lock');
           if (!ok) return;
         }
         await gate.setEnabled(v);
-        await ref.read(appLockProvider.notifier).setEnabled(v);
+        // Only mark the app as freshly-locked when turning the setting off→
+        // never immediately after the user just unlocked it above, or the
+        // lock screen slams down over Settings before they can leave it.
+        await ref.read(appLockProvider.notifier).setEnabled(v, locked: false);
         if (!mounted) return;
         setState(() => _enabled = v);
       },

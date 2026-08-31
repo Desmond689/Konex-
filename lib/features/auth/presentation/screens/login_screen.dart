@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/errors/error_handler.dart';
 import '../../../../core/router/routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -10,6 +9,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_text_field.dart';
 import '../providers/auth_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -105,7 +105,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Center(child: Text('KONEX', style: AppTextStyles.brand)),
+                  Center(
+                    child: Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            width: 72,
+                            height: 72,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text('KONEX', style: AppTextStyles.brand),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Center(
                     child: Text(
@@ -135,6 +152,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     obscureText: true,
                     validator: Validators.password,
                     autofillHints: const [AutofillHints.password],
+                  ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: KxTextButton(
+                      label: 'Forgot password?',
+                      onPressed: () => context.push(Routes.forgotPassword),
+                    ),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: 12),

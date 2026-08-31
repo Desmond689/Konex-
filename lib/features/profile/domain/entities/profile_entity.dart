@@ -16,6 +16,7 @@ class ProfileEntity extends Equatable {
     this.isBanned = false,
     this.followerCount = 0,
     this.followingCount = 0,
+    this.reputation,
     this.isFollowing = false,
     this.isBlocked = false,
     this.games = const [],
@@ -33,6 +34,7 @@ class ProfileEntity extends Equatable {
     this.whoCanFollow = 'everyone',
     this.gamesVisibility = 'everyone',
     this.squadVisibility = 'everyone',
+    this.lastSeen,
   });
 
   final String id;
@@ -49,6 +51,11 @@ class ProfileEntity extends Equatable {
   final bool isBanned;
   final int followerCount;
   final int followingCount;
+  // Server-computed (see migration 202608300004_profile_reputation.sql):
+  // followers*10 + likes received*2 + comments received*1, kept in sync
+  // by DB triggers. Nullable only for rows fetched before that column
+  // existed; the UI treats a null the same as 0, never a guess.
+  final int? reputation;
   final bool isFollowing;
   final bool isBlocked;
   final List<String> games;
@@ -66,6 +73,14 @@ class ProfileEntity extends Equatable {
   final String whoCanFollow;
   final String gamesVisibility;
   final String squadVisibility;
+  // Server-updated heartbeat (see PresenceService + touch_presence RPC,
+  // migration 202608300005_profile_presence.sql). "Online" is derived from
+  // this, never hardcoded — a user only shows online if they've actually
+  // had the app foregrounded in the last couple of minutes.
+  final DateTime? lastSeen;
+
+  bool get isOnline =>
+      lastSeen != null && DateTime.now().toUtc().difference(lastSeen!.toUtc()) < const Duration(minutes: 2);
 
   String get displayName =>
       (gamerName?.isNotEmpty == true) ? gamerName! : username;
@@ -137,6 +152,7 @@ class ProfileEntity extends Equatable {
     bool? isBlocked,
     int? followerCount,
     int? followingCount,
+    int? reputation,
     List<String>? games,
     Map<String, String>? gameCommunityIds,
     String? squadId,
@@ -167,6 +183,7 @@ class ProfileEntity extends Equatable {
       isBanned: isBanned,
       followerCount: followerCount ?? this.followerCount,
       followingCount: followingCount ?? this.followingCount,
+      reputation: reputation ?? this.reputation,
       isFollowing: isFollowing ?? this.isFollowing,
       isBlocked: isBlocked ?? this.isBlocked,
       games: games ?? this.games,
@@ -184,6 +201,7 @@ class ProfileEntity extends Equatable {
       whoCanFollow: whoCanFollow ?? this.whoCanFollow,
       gamesVisibility: gamesVisibility ?? this.gamesVisibility,
       squadVisibility: squadVisibility ?? this.squadVisibility,
+      lastSeen: lastSeen,
     );
   }
 
@@ -219,6 +237,7 @@ class ProfileEntity extends Equatable {
       isBanned: map['is_banned'] as bool? ?? false,
       followerCount: map['follower_count'] as int? ?? 0,
       followingCount: map['following_count'] as int? ?? 0,
+      reputation: map['reputation'] as int?,
       isFollowing: isFollowing ?? false,
       isBlocked: isBlocked ?? false,
       games: games ?? const [],
@@ -238,6 +257,9 @@ class ProfileEntity extends Equatable {
       whoCanFollow: whoCanFollow ?? 'everyone',
       gamesVisibility: gamesVisibility ?? 'everyone',
       squadVisibility: squadVisibility ?? 'everyone',
+      lastSeen: map['last_seen'] != null
+          ? DateTime.tryParse(map['last_seen'] as String)
+          : null,
     );
   }
 

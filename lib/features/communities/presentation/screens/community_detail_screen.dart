@@ -8,8 +8,15 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_error_view.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
+import '../../../admin/presentation/providers/admin_provider.dart';
+import '../../../admin/presentation/screens/admin_edit_game_screen.dart';
+import '../../../posts/presentation/providers/post_provider.dart';
+import '../../../posts/presentation/widgets/post_card.dart';
+import '../../../posts/presentation/widgets/composer_sheet.dart';
 import '../providers/community_provider.dart';
 import '../../domain/community_entity.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class CommunityDetailScreen extends ConsumerStatefulWidget {
   const CommunityDetailScreen({super.key, required this.communityId});
@@ -73,13 +80,24 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
     );
   }
 
+  Future<void> _editGame(CommunityEntity c) async {
+    final ok = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => AdminEditGameScreen(community: c)),
+    );
+    if (ok == true) {
+      ref.invalidate(communityByIdProvider(widget.communityId));
+      ref.invalidate(communitiesDiscoverProvider(null));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(communityByIdProvider(widget.communityId));
+    final isStaff = ref.watch(isStaffProvider).valueOrNull ?? false;
 
     return async.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(appBar: AppBar(), body: KxErrorView(message: e.toString())),
+      error: (e, _) => Scaffold(appBar: AppBar(), body: KxErrorView(message: ErrorHandler.userMessage(e))),
       data: (c) {
         if (c == null) {
           return Scaffold(appBar: AppBar(), body: const Center(child: Text('Not found')));
@@ -94,6 +112,12 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                 expandedHeight: 180,
                 pinned: true,
                 actions: [
+                  if (isStaff)
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Edit game',
+                      onPressed: () => _editGame(c),
+                    ),
                   IconButton(
                     icon: const Icon(Icons.share_outlined),
                     onPressed: () => ShareService.shareGame(context, c.slug),
@@ -129,7 +153,16 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                               : null,
                         ),
                         const SizedBox(height: 8),
-                        Text(c.name, style: AppTextStyles.title),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(c.name, style: AppTextStyles.title),
+                            if (c.isOfficial) ...[
+                              const SizedBox(width: 6),
+                              const KxVerifiedBadge(size: 18),
+                            ],
+                          ],
+                        ),
                         Text(
                           '${c.memberCount} members'
                           '${c.isOfficial ? ' · Official' : ''}'
@@ -146,7 +179,21 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                             ),
                           )
                         else if (c.isMember)
-                          Text('Joined ✓', style: AppTextStyles.caption),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check, size: 14, color: AppColors.textSecondary),
+                                const SizedBox(width: 4),
+                                Text('Joined', style: AppTextStyles.caption),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -167,8 +214,12 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
             body: TabBarView(
               controller: _tabs,
               children: [
-                _HomeTab(communityId: c.id, community: c),
-                _FeedTab(communityId: c.id, member: c.isMember, canAnnounce: c.isModerator),
+                _HomeTab(
+                  communityId: c.id,
+                  community: c,
+                  onSeeAllPosts: () => _tabs?.animateTo(1),
+                ),
+                _FeedTab(communityId: c.id, member: c.isMember, canAnnounce: c.isModerator, community: c),
                 _LfgPlaceholder(gameName: c.gameName, member: c.isMember),
                 _SquadsTab(communityId: c.id),
                 _AboutTab(c: c),
@@ -181,89 +232,162 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
   }
 }
 
-class _HomeTab extends ConsumerStatefulWidget {
-  const _HomeTab({required this.communityId, required this.community});
+class _HomeTab extends ConsumerWidget {
+  const _HomeTab({required this.communityId, required this.community, required this.onSeeAllPosts});
   final String communityId;
   final CommunityEntity community;
+  final VoidCallback onSeeAllPosts;
 
-  @override
-  ConsumerState<_HomeTab> createState() => _HomeTabState();
-}
-
-class _HomeTabState extends ConsumerState<_HomeTab> {
-  List<Map<String, dynamic>> _highlights = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final r = await ref.read(communityRepositoryProvider).posts(widget.communityId);
-    if (!mounted) return;
-    final posts = r.valueOrNull ?? <Map<String, dynamic>>[];
-    final announcements = [
-      for (final p in posts)
-        if (p['is_announcement'] == true) p,
-    ];
-    setState(() {
-      _highlights = announcements.isNotEmpty
-          ? announcements
-          : posts.take(5).toList();
-      _loading = false;
-    });
+  Future<void> _createPost(BuildContext context, WidgetRef ref) async {
+    final created = await showCreatePostSheet(
+      context,
+      origin: ComposerOrigin.community,
+      destinationId: communityId,
+      destinationName: community.name,
+      destinationAvatarUrl: community.avatarUrl,
+      destinationSubtitle: '${community.memberCount} members · ${community.isOfficial ? 'Official' : 'Community'}',
+    );
+    if (created == true) ref.invalidate(communityPostFeedProvider(communityId));
   }
 
   @override
-  Widget build(BuildContext context) {
-    final c = widget.community;
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(c.name, style: AppTextStyles.title),
-        if (c.gameName.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(c.gameName, style: AppTextStyles.caption),
-        ],
-        if (c.description != null && c.description!.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(c.description!, style: AppTextStyles.body),
-        ],
-        const SizedBox(height: 8),
-        Text(
-          '${c.memberCount} members · ${c.isOfficial ? "Official" : "Community"}',
-          style: AppTextStyles.caption,
-        ),
-        const Divider(height: 32),
-        Text('Highlights', style: AppTextStyles.title.copyWith(fontSize: 16)),
-        const SizedBox(height: 8),
-        if (_highlights.isEmpty)
-          Text(
-            'No posts yet. Switch to Posts to start the conversation.',
-            style: AppTextStyles.caption,
-          )
-        else
-          for (final p in _highlights)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                title: Text(
-                  p['body'] as String? ?? '',
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = community;
+    final postsAsync = ref.watch(communityPostFeedProvider(communityId));
+
+    return postsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
+      data: (posts) {
+        final highlight = posts.where((p) => p.isAnnouncement).isNotEmpty
+            ? posts.firstWhere((p) => p.isAnnouncement)
+            : null;
+
+        return RefreshIndicator(
+          onRefresh: () async => ref.invalidate(communityPostFeedProvider(communityId)),
+          color: AppColors.primary,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [AppColors.primary.withValues(alpha: 0.3), AppColors.surfaceElevated],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.border),
                 ),
-                subtitle: Text(
-                  p['is_announcement'] == true ? 'Announcement' : 'Recent',
-                  style: AppTextStyles.caption,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(10),
+                        image: c.avatarUrl != null
+                            ? DecorationImage(image: NetworkImage(c.avatarUrl!), fit: BoxFit.cover)
+                            : null,
+                      ),
+                      child: c.avatarUrl == null
+                          ? const Icon(Icons.sports_esports, color: Colors.white)
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            c.isOfficial ? 'Official ${c.gameName} community on KONEX' : c.name,
+                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          Text(
+                            'The place for players to team up, share tips, and stay updated!',
+                            style: AppTextStyles.caption,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-      ],
+              const SizedBox(height: 16),
+              if (highlight != null) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Highlights', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                    TextButton(onPressed: onSeeAllPosts, child: const Text('See all')),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.campaign_outlined, color: AppColors.primary, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(highlight.body ?? '', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, fontSize: 13)),
+                            const SizedBox(height: 2),
+                            Text(_relativeTimeCommunity(highlight.createdAt), style: AppTextStyles.caption),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Latest Posts', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                  TextButton(onPressed: onSeeAllPosts, child: const Text('See all')),
+                ],
+              ),
+              if (posts.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text('No posts yet', style: AppTextStyles.caption),
+                )
+              else
+                ...posts.take(2).map((p) => PostCard(key: ValueKey(p.id), post: p)),
+              const SizedBox(height: 8),
+              KxButton(label: 'Create Post', onPressed: () => _createPost(context, ref)),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
     );
   }
+}
+
+String _relativeTimeCommunity(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
 }
 
 class _FeedTab extends ConsumerStatefulWidget {
@@ -271,91 +395,88 @@ class _FeedTab extends ConsumerStatefulWidget {
     required this.communityId,
     required this.member,
     required this.canAnnounce,
+    required this.community,
   });
   final String communityId;
   final bool member;
   final bool canAnnounce;
+  final CommunityEntity community;
 
   @override
   ConsumerState<_FeedTab> createState() => _FeedTabState();
 }
 
 class _FeedTabState extends ConsumerState<_FeedTab> {
-  List<Map<String, dynamic>> _posts = [];
-  bool _loading = true;
+  String _filter = 'all';
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
+  Future<void> _createPost() async {
+    final created = await showCreatePostSheet(
+      context,
+      origin: ComposerOrigin.community,
+      destinationId: widget.communityId,
+      destinationName: widget.community.name,
+      destinationAvatarUrl: widget.community.avatarUrl,
+      destinationSubtitle: '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
+    );
+    if (created == true) ref.invalidate(communityPostFeedProvider(widget.communityId));
   }
 
-  Future<void> _load() async {
-    final r = await ref.read(communityRepositoryProvider).posts(widget.communityId);
-    if (!mounted) return;
-    setState(() {
-      _posts = r.valueOrNull ?? [];
-      _loading = false;
-    });
-  }
-
-  Future<void> _compose({bool announcement = false}) async {
-    if (!widget.member) return;
-    final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(announcement ? 'Community announcement' : 'Post'),
-        content: TextField(controller: ctrl, maxLines: 4),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Post')),
-        ],
-      ),
+  Future<void> _createAnnouncement() async {
+    final created = await showCreateAnnouncementSheet(
+      context,
+      origin: ComposerOrigin.community,
+      destinationId: widget.communityId,
+      destinationName: widget.community.name,
+      destinationAvatarUrl: widget.community.avatarUrl,
+      destinationSubtitle: '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
     );
-    if (ok != true || ctrl.text.trim().isEmpty) return;
-    final r = await ref.read(communityRepositoryProvider).createPost(
-          communityId: widget.communityId,
-          body: ctrl.text.trim(),
-          announcement: announcement,
-        );
-    r.when(
-      success: (_) => _load(),
-      failure: (e, _) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-      },
-    );
+    if (created == true) ref.invalidate(communityPostFeedProvider(widget.communityId));
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
+    final postsAsync = ref.watch(communityPostFeedProvider(widget.communityId));
+
     return Column(
       children: [
-        if (widget.member)
+        if (widget.member) ...[
           Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+            child: KxButton(label: 'Create Post', onPressed: _createPost),
+          ),
+          if (widget.canAnnounce)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+              child: OutlinedButton.icon(
+                onPressed: _createAnnouncement,
+                icon: const Icon(Icons.campaign_outlined, size: 18),
+                label: const Text('Announce'),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _compose(announcement: false),
-                    child: const Text('Post'),
-                  ),
-                ),
-                if (widget.canAnnounce) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _compose(announcement: true),
-                      child: const Text('Announce'),
+                for (final f in const [
+                  ('all', 'All'),
+                  ('text', 'Discussion'),
+                  ('lfg', 'LFG'),
+                  ('tip', 'Tips'),
+                  ('event', 'Events'),
+                ])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(f.$2),
+                      selected: _filter == f.$1,
+                      onSelected: (_) => setState(() => _filter = f.$1),
                     ),
                   ),
-                ],
               ],
             ),
-          )
-        else
+          ),
+          const SizedBox(height: 6),
+        ] else
           Padding(
             padding: const EdgeInsets.all(12),
             child: Text(
@@ -365,26 +486,24 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
             ),
           ),
         Expanded(
-          child: _posts.isEmpty
-              ? Center(child: Text('No posts yet', style: AppTextStyles.caption))
-              : ListView.builder(
-                  itemCount: _posts.length,
-                  itemBuilder: (_, i) {
-                    final p = _posts[i];
-                    final profile = p['profiles'] as Map<String, dynamic>?;
-                    final name = (profile?['gamer_name'] as String?)?.isNotEmpty == true
-                        ? profile!['gamer_name'] as String
-                        : profile?['username'] as String? ?? 'User';
-                    final ann = p['is_announcement'] == true;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: ListTile(
-                        title: Text(ann ? '📌 $name' : name),
-                        subtitle: Text(p['body'] as String? ?? ''),
-                      ),
-                    );
-                  },
+          child: postsAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
+            data: (posts) {
+              final filtered = _filter == 'all' ? posts : posts.where((p) => p.postType == _filter).toList();
+              if (filtered.isEmpty) {
+                return Center(child: Text('No posts yet', style: AppTextStyles.caption));
+              }
+              return RefreshIndicator(
+                onRefresh: () async => ref.invalidate(communityPostFeedProvider(widget.communityId)),
+                color: AppColors.primary,
+                child: ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) => PostCard(key: ValueKey(filtered[i].id), post: filtered[i]),
                 ),
+              );
+            },
+          ),
         ),
       ],
     );

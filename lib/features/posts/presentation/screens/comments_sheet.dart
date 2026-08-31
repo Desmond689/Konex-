@@ -14,26 +14,46 @@ import '../../../social/presentation/report_dialog.dart';
 import '../../domain/entities/post_entity.dart';
 import '../providers/post_provider.dart';
 
-Future<void> showCommentsSheet(
+/// Opens the comments sheet and returns the post's final comment count once
+/// it closes (however it closes — send, delete, swipe-down, or tap-outside),
+/// so the caller (usually a [PostCard]) can update its own displayed count
+/// without waiting for a full feed refresh. Returns null if the count never
+/// changed from what was loaded (e.g. the sheet was dismissed immediately).
+Future<int?> showCommentsSheet(
   BuildContext context,
   String postId, {
   String? postAuthorId,
-}) {
-  return showModalBottomSheet(
+}) async {
+  int? latestCount;
+  await showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (_) => CommentsSheet(postId: postId, postAuthorId: postAuthorId),
+    builder: (_) => CommentsSheet(
+      postId: postId,
+      postAuthorId: postAuthorId,
+      onCountChanged: (count) => latestCount = count,
+    ),
   );
+  return latestCount;
 }
 
 class CommentsSheet extends ConsumerStatefulWidget {
-  const CommentsSheet({super.key, required this.postId, this.postAuthorId});
+  const CommentsSheet({
+    super.key,
+    required this.postId,
+    this.postAuthorId,
+    this.onCountChanged,
+  });
   final String postId;
   final String? postAuthorId;
+
+  /// Fired whenever the visible comment count changes: on initial load,
+  /// on realtime-triggered reload, on sending a comment, and on deleting one.
+  final void Function(int count)? onCountChanged;
 
   @override
   ConsumerState<CommentsSheet> createState() => _CommentsSheetState();
@@ -90,6 +110,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
       _all = r.valueOrNull ?? [];
       _loading = false;
     });
+    widget.onCountChanged?.call(_all.length);
   }
 
   List<CommentEntity> get _roots {
@@ -184,6 +205,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
             _replyToId = null;
             _replyToName = null;
           });
+          widget.onCountChanged?.call(_all.length);
         },
         failure: (_, __) {},
       );
@@ -211,6 +233,7 @@ class _CommentsSheetState extends ConsumerState<CommentsSheet> {
                     setState(
                       () => _all = _all.where((x) => x.id != c.id).toList(),
                     );
+                    widget.onCountChanged?.call(_all.length);
                   }
                 },
               ),

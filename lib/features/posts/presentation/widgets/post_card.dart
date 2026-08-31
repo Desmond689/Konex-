@@ -48,13 +48,35 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
   late final AnimationController _heartCtrl;
   bool _showHeart = false;
 
+  // Owned locally rather than read from whichever feed/list provider handed
+  // us this widget — that provider (home feed, squad tab, profile, saved
+  // posts, post detail) usually doesn't share state with the others, so a
+  // like/comment tap here would silently no-op or bounce back on the next
+  // rebuild if we only wrote through it. This card is the source of truth
+  // for its own like/comment count while it's on screen; other providers
+  // are best-effort synced via syncPostFields so they don't go stale.
+  late PostEntity _post;
+
   @override
   void initState() {
     super.initState();
+    _post = widget.post;
     _heartCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PostCardBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Only reset when this State has actually been handed a different post
+    // (e.g. list reordering reused the State object) — otherwise keep our
+    // local optimistic state instead of clobbering it with a possibly-stale
+    // widget.post from a parent rebuild.
+    if (oldWidget.post.id != widget.post.id) {
+      _post = widget.post;
+    }
   }
 
   @override
@@ -63,20 +85,54 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
     super.dispose();
   }
 
+  Future<void> _toggleLike() async {
+    final wasLiked = _post.likedByMe;
+    final previous = _post;
+    final updated = _post.copyWith(
+      likedByMe: !wasLiked,
+      likeCount: wasLiked ? _post.likeCount - 1 : _post.likeCount + 1,
+    );
+    setState(() => _post = updated);
+
+    final repo = ref.read(postRepositoryProvider);
+    final result = wasLiked ? await repo.unlikePost(_post.id) : await repo.likePost(_post.id);
+    if (!mounted) return;
+    if (result.isFailure) {
+      setState(() => _post = previous);
+      return;
+    }
+    ref.read(feedControllerProvider.notifier).syncPostFields(
+          updated.id,
+          likeCount: updated.likeCount,
+          likedByMe: updated.likedByMe,
+        );
+  }
+
   Future<void> _doubleTapLike() async {
-    final post = widget.post;
-    if (!post.likedByMe) {
-      await widget.feed.toggleLike(post);
+    if (!_post.likedByMe) {
+      await _toggleLike();
     }
     setState(() => _showHeart = true);
     await _heartCtrl.forward(from: 0);
     if (mounted) setState(() => _showHeart = false);
   }
 
+  Future<void> _openComments() async {
+    final newCount = await showCommentsSheet(
+      context,
+      _post.id,
+      postAuthorId: _post.authorId,
+    );
+    if (!mounted || newCount == null) return;
+    setState(() => _post = _post.copyWith(commentCount: newCount));
+    ref
+        .read(feedControllerProvider.notifier)
+        .syncPostFields(_post.id, commentCount: newCount);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final post = widget.post;
-    final feed = widget.feed;
+    final post = _post;
     final currentUserId = ref.read(supabaseClientProvider).auth.currentUser?.id;
     final isAuthor = currentUserId != null && currentUserId == post.authorId;
 
@@ -116,7 +172,21 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(post.authorDisplay, style: AppTextStyles.title.copyWith(fontSize: 15)),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              post.authorDisplay,
+                              style: AppTextStyles.title.copyWith(fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_roleBadgeLabel(post.authorSquadRole) != null) ...[
+                            const SizedBox(width: 6),
+                            _RoleBadge(label: _roleBadgeLabel(post.authorSquadRole)!),
+                          ],
+                        ],
+                      ),
                       Text(
                         post.destinationLabel,
                         style: AppTextStyles.caption,
@@ -128,12 +198,6 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                     ],
                   ),
                 ),
-                if (post.communityName != null)
-                  Chip(
-                    label: Text(post.communityName!, style: AppTextStyles.caption),
-                    visualDensity: VisualDensity.compact,
-                    backgroundColor: AppColors.surfaceElevated,
-                  ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_horiz, size: 20),
                   onSelected: (v) async {
@@ -189,6 +253,10 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                 ),
               ],
             ),
+            if (_postTagLabel(post) != null) ...[
+              const SizedBox(height: 10),
+              _PostTypeTag(post: post),
+            ],
             if (post.body != null && post.body!.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(post.body!, style: AppTextStyles.body),
@@ -213,20 +281,35 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                   icon: post.likedByMe ? Icons.favorite : Icons.favorite_border,
                   color: post.likedByMe ? AppColors.accent : AppColors.textSecondary,
                   label: '${post.likeCount}',
-                  onTap: () => feed.toggleLike(post),
+                  onTap: _toggleLike,
                 ),
                 const SizedBox(width: 16),
                 _Action(
                   icon: Icons.chat_bubble_outline,
                   label: '${post.commentCount}',
-                  onTap: () => showCommentsSheet(context, post.id, postAuthorId: post.authorId),
+                  onTap: _openComments,
                 ),
                 const SizedBox(width: 16),
                 _Action(
+                  icon: Icons.repeat,
+                  label: '${post.shareCount}',
+                  onTap: () async {
+                    final helper = RepostHelper(ref.read(supabaseClientProvider));
+                    await helper.repost(post.id);
+                    if (context.mounted) {
+                      setState(() => _post = _post.copyWith(shareCount: _post.shareCount + 1));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reposted')),
+                      );
+                    }
+                  },
+                ),
+                const Spacer(),
+                _Action(
                   icon: post.savedByMe ? Icons.bookmark : Icons.bookmark_border,
                   color: post.savedByMe ? AppColors.secondary : AppColors.textSecondary,
-                  label: 'Save',
-                  onTap: () => feed.toggleSave(post),
+                  label: '',
+                  onTap: () => widget.feed.toggleSave(post),
                 ),
               ],
             ),
@@ -245,6 +328,86 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Squad-role badge label shown next to the author's name (owner/moderator only).
+String? _roleBadgeLabel(String? role) {
+  switch (role) {
+    case 'owner':
+      return 'Owner';
+    case 'moderator':
+      return 'Mod';
+    default:
+      return null;
+  }
+}
+
+/// Post-type tag shown above the body: Announcement takes priority, then the
+/// squad/community post type (Discussion for plain text, or LFG/Tip/Event).
+String? _postTagLabel(PostEntity post) {
+  if (post.isAnnouncement) return 'Announcement';
+  if (post.postType == 'text' || post.postType == 'image' || post.postType == 'video') {
+    return 'Discussion';
+  }
+  return post.typeBadgeLabel;
+}
+
+class _RoleBadge extends StatelessWidget {
+  const _RoleBadge({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(
+          color: AppColors.primary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _PostTypeTag extends StatelessWidget {
+  const _PostTypeTag({required this.post});
+  final PostEntity post;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = _postTagLabel(post)!;
+    final color = post.isAnnouncement
+        ? AppColors.primary
+        : switch (post.postType) {
+            'lfg' => AppColors.secondary,
+            'tip' => AppColors.accent,
+            'event' => AppColors.success,
+            _ => AppColors.textSecondary,
+          };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(
+        label,
+        style: AppTextStyles.caption.copyWith(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

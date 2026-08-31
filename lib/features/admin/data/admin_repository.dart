@@ -24,6 +24,19 @@ class AdminRepository with BaseRepository {
         return role == 'moderator' || role == 'admin' || role == 'super_admin';
       });
 
+  /// The signed-in staffer's own app_role, for client-side action gating
+  /// (mirrors `can()` in the web admin panel's AuthContext.jsx). The
+  /// admin_set_role RPC is the real boundary; this just keeps the UI from
+  /// showing buttons that would 403.
+  Future<Result<String>> myRole() => guard(() async {
+        final row = await _client
+            .from('profiles')
+            .select('app_role')
+            .eq('id', _uid)
+            .maybeSingle();
+        return row?['app_role'] as String? ?? 'user';
+      });
+
   Future<Result<AdminStats>> stats() => guard(() async {
         final users = await _client.from('profiles').select('id').count(CountOption.exact);
         final reports = await _client
@@ -145,7 +158,7 @@ class AdminRepository with BaseRepository {
         final rows = await _client
             .from('profiles')
             .select(
-              'id, username, gamer_name, app_role, is_banned, is_restricted, created_at',
+              'id, username, gamer_name, app_role, is_banned, is_restricted, is_verified, created_at',
             )
             .or('username.ilike.%$q%,gamer_name.ilike.%$q%')
             .limit(30);
@@ -174,6 +187,19 @@ class AdminRepository with BaseRepository {
         await _client.from('audit_logs').insert({
           'actor_id': _uid,
           'action': banned ? 'ban' : 'unban',
+          'target_type': 'profile',
+          'target_id': userId,
+        });
+      });
+
+  Future<Result<void>> setUserVerified(String userId, bool verified) => guard(() async {
+        await _client.rpc('admin_set_verified', params: {
+          'p_user_id': userId,
+          'p_verified': verified,
+        });
+        await _client.from('audit_logs').insert({
+          'actor_id': _uid,
+          'action': verified ? 'verify' : 'unverify',
           'target_type': 'profile',
           'target_id': userId,
         });

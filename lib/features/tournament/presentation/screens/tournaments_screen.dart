@@ -6,6 +6,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../providers/tournament_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class TournamentsScreen extends ConsumerWidget {
   const TournamentsScreen({super.key});
@@ -19,7 +20,7 @@ class TournamentsScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(tournamentsListProvider),
         ),
         data: (list) {

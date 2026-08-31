@@ -11,6 +11,7 @@ import 'core/deep_links/deep_link_router.dart';
 import 'core/notifications/push_notification_service.dart';
 import 'core/router/app_router.dart' show appRouterProvider, rootNavigatorKey;
 import 'core/security/app_lock_controller.dart';
+import 'core/services/presence_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/calls/presentation/providers/call_controller.dart';
 
@@ -25,6 +26,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
     with WidgetsBindingObserver {
   StreamSubscription<Uri>? _linkSub;
   final _appLinks = AppLinks();
+  final _presence = PresenceService(Supabase.instance.client);
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
       ref.read(appLockProvider.notifier).bootstrap();
       _initPush();
       _initDeepLinks();
+      _presence.start();
     });
   }
 
@@ -42,6 +45,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _presence.stop();
     super.dispose();
   }
 
@@ -50,6 +54,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       ref.read(appLockProvider.notifier).onAppPaused();
+      _presence.stop();
     } else if (state == AppLifecycleState.resumed) {
       final lock = ref.read(appLockProvider);
       if (lock.enabled && lock.locked) {
@@ -59,6 +64,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
       if (ctx != null) {
         DeepLinkRouter.consumePending(ctx);
       }
+      _presence.start();
     }
   }
 
@@ -120,6 +126,8 @@ class _KonexAppState extends ConsumerState<KonexApp>
       final code = uri.queryParameters['code'];
       final tokenHash = uri.queryParameters['token_hash'];
       final type = uri.queryParameters['type'];
+      final isRecovery = type == 'recovery';
+
       if (code != null && code.isNotEmpty) {
         await client.auth.exchangeCodeForSession(code);
       } else if (tokenHash != null &&
@@ -128,14 +136,19 @@ class _KonexAppState extends ConsumerState<KonexApp>
           type.isNotEmpty) {
         await client.auth.verifyOTP(
           tokenHash: tokenHash,
-          type: OtpType.signup,
+          // Recovery links must be verified with OtpType.recovery, not the
+          // hardcoded signup type — using the wrong type here was rejecting
+          // valid password-reset links.
+          type: isRecovery ? OtpType.recovery : OtpType.signup,
         );
       } else {
         throw StateError('Email verification link is incomplete.');
       }
       final ctx = rootNavigatorKey.currentContext;
       if (ctx != null) {
-        ref.read(appRouterProvider).go('/onboarding');
+        // A recovery link's whole purpose is to let the user set a new
+        // password — send them there instead of onboarding.
+        ref.read(appRouterProvider).go(isRecovery ? '/reset-password' : '/onboarding');
       }
     } catch (error, stack) {
       debugPrint('Auth callback failed: $error');
@@ -145,7 +158,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
         ScaffoldMessenger.of(ctx).showSnackBar(
           const SnackBar(
             content:
-                Text('Email verification failed. Please request a new link.'),
+                Text('This link is invalid or has expired. Please request a new one.'),
           ),
         );
       }

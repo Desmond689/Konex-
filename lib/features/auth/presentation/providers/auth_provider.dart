@@ -77,6 +77,14 @@ class AuthController extends StateNotifier<AsyncValue<AuthUserEntity?>> {
     await _repo.signOut();
     state = const AsyncValue.data(null);
   }
+
+  Future<Result<void>> requestPasswordReset(String email) {
+    return _repo.resetPassword(email);
+  }
+
+  Future<Result<void>> updatePassword(String newPassword) {
+    return _repo.updatePassword(newPassword);
+  }
 }
 
 final authControllerProvider =

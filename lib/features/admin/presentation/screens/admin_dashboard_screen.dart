@@ -9,6 +9,8 @@ import 'admin_reports_screen.dart';
 import 'admin_users_screen.dart';
 import 'admin_audit_screen.dart';
 import 'admin_create_game_screen.dart';
+import 'admin_games_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class AdminDashboardScreen extends ConsumerWidget {
   const AdminDashboardScreen({super.key});
@@ -22,7 +24,7 @@ class AdminDashboardScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Admin')),
       body: staff.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => KxErrorView(message: e.toString()),
+        error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
         data: (ok) {
           if (!ok) {
             return Center(
@@ -60,6 +62,14 @@ class AdminDashboardScreen extends ConsumerWidget {
                 subtitle: const Text('Game = Community in one step'),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const AdminCreateGameScreen()),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.videogame_asset_outlined),
+                title: const Text('Manage games'),
+                subtitle: const Text('Search, edit, and add logos to any game'),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const AdminGamesScreen()),
                 ),
               ),
               ListTile(

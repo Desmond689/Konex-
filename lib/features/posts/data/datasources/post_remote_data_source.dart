@@ -25,10 +25,11 @@ class PostRemoteDataSource {
     final rows = await _client
         .from('posts')
         .select('''
-          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement,
+          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned,
           like_count, comment_count, share_count, created_at,
           profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ),
           communities ( name ),
+          squads ( name ),
           post_media ( media:media_id ( media_url ) )
         ''')
         .eq('is_deleted', false)
@@ -53,10 +54,11 @@ class PostRemoteDataSource {
     final rows = await _client
         .from('posts')
         .select(
-          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, '
+          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned, '
           'like_count, comment_count, share_count, created_at, '
           'profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ), '
           'communities ( name ), '
+          'squads ( name ), '
           'post_media ( media:media_id ( media_url ) )',
         )
         .inFilter('author_id', ids)
@@ -79,10 +81,11 @@ class PostRemoteDataSource {
     var query = _client
         .from('posts')
         .select(
-          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, '
+          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned, '
           'like_count, comment_count, share_count, created_at, '
           'profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ), '
           'communities ( name ), '
+          'squads ( name ), '
           'post_media ( media:media_id ( media_url ) )',
         )
         .eq('is_deleted', false);
@@ -102,10 +105,11 @@ class PostRemoteDataSource {
     final rows = await _client
         .from('posts')
         .select('''
-          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement,
+          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned,
           like_count, comment_count, share_count, created_at,
           profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ),
           communities ( name ),
+          squads ( name ),
           post_media ( media:media_id ( media_url ) )
         ''')
         .eq('author_id', userId)
@@ -130,10 +134,11 @@ class PostRemoteDataSource {
       final rows = await _client
           .from('posts')
           .select(
-            'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, '
+            'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned, '
             'like_count, comment_count, share_count, created_at, '
             'profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ), '
             'communities ( name ), '
+            'squads ( name ), '
             'post_media ( media:media_id ( media_url ) )',
           )
           .inFilter('id', chunk)
@@ -152,22 +157,97 @@ class PostRemoteDataSource {
     ];
   }
 
+  /// Posts within a community, pinned first then newest first.
+  Future<List<PostEntity>> getCommunityPosts(String communityId, {int page = 0, int pageSize = AppConstants.feedPageSize}) async {
+    final from = page * pageSize;
+    final to = from + pageSize - 1;
+    final rows = await _client
+        .from('posts')
+        .select(
+          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned, '
+          'like_count, comment_count, share_count, created_at, '
+          'profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ), '
+          'communities ( name ), '
+          'squads ( name ), '
+          'post_media ( media:media_id ( media_url ) )',
+        )
+        .eq('community_id', communityId)
+        .eq('is_deleted', false)
+        .order('is_pinned', ascending: false)
+        .order('created_at', ascending: false)
+        .range(from, to);
+    final maps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    return mapPostsBatch(maps);
+  }
+
+  /// Posts within a squad, pinned first then newest first.
+  Future<List<PostEntity>> getSquadPosts(String squadId, {int page = 0, int pageSize = AppConstants.feedPageSize}) async {
+    final from = page * pageSize;
+    final to = from + pageSize - 1;
+    final rows = await _client
+        .from('posts')
+        .select(
+          'id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned, '
+          'like_count, comment_count, share_count, created_at, '
+          'profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ), '
+          'communities ( name ), '
+          'squads ( name ), '
+          'post_media ( media:media_id ( media_url ) )',
+        )
+        .eq('squad_id', squadId)
+        .eq('is_deleted', false)
+        .order('is_pinned', ascending: false)
+        .order('created_at', ascending: false)
+        .range(from, to);
+    final maps = (rows as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    final ids = maps.map((m) => m['author_id'] as String).toSet().toList();
+    final roles = await _squadRoles(squadId, ids);
+    return mapPostsBatch(maps, squadRoles: roles);
+  }
+
+  Future<Map<String, String>> _squadRoles(String squadId, List<String> userIds) async {
+    if (userIds.isEmpty) return const {};
+    final rows = await _client
+        .from('squad_members')
+        .select('user_id, role')
+        .eq('squad_id', squadId)
+        .inFilter('user_id', userIds);
+    final out = <String, String>{};
+    for (final r in rows as List) {
+      final m = r as Map;
+      out[m['user_id'] as String] = m['role'] as String? ?? 'member';
+    }
+    return out;
+  }
+
   Future<PostEntity> createTextPost({
     required String body,
     String? communityId,
+    String? squadId,
+    String postType = 'text',
+    bool isAnnouncement = false,
+    bool isPinned = false,
     String visibility = 'public',
   }) async {
     final row = await _client.from('posts').insert({
       'author_id': _uid,
       'body': body.trim(),
-      'post_type': 'text',
+      'post_type': postType,
       'visibility': visibility,
+      'is_announcement': isAnnouncement,
+      'is_pinned': isPinned,
       if (communityId != null) 'community_id': communityId,
+      if (squadId != null) 'squad_id': squadId,
     }).select('''
-      id, author_id, community_id, post_type, body, visibility,
+      id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned,
       like_count, comment_count, share_count, created_at,
       profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ),
-      communities ( name )
+      communities ( name ),
+      squads ( name )
     ''').single();
 
     return _mapPost(Map<String, dynamic>.from(row));
@@ -177,17 +257,23 @@ class PostRemoteDataSource {
     required String body,
     required String localImagePath,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   }) =>
       createMultiImagePost(
         body: body,
         localImagePaths: [localImagePath],
         communityId: communityId,
+        squadId: squadId,
+        postType: postType,
       );
 
   Future<PostEntity> createMultiImagePost({
     required String body,
     required List<String> localImagePaths,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   }) async {
     if (localImagePaths.isEmpty) {
       throw ArgumentError('At least one image is required');
@@ -196,9 +282,10 @@ class PostRemoteDataSource {
     final postRow = await _client.from('posts').insert({
       'author_id': _uid,
       'body': body.trim().isEmpty ? null : body.trim(),
-      'post_type': 'image',
+      'post_type': postType,
       'visibility': 'public',
       if (communityId != null) 'community_id': communityId,
+      if (squadId != null) 'squad_id': squadId,
     }).select().single();
 
     final postId = postRow['id'] as String;
@@ -236,7 +323,7 @@ class PostRemoteDataSource {
     final row = await _client
         .from('posts')
         .select('''
-          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement,
+          id, author_id, community_id, squad_id, post_type, body, visibility, is_announcement, is_pinned,
           like_count, comment_count, share_count, created_at,
           profiles!posts_author_id_fkey ( username, gamer_name, avatar_url ),
           communities ( name ),
@@ -421,7 +508,10 @@ class PostRemoteDataSource {
 
 
   /// Batch-fetch likes/saves for a page of posts (2 queries instead of 2N).
-  Future<List<PostEntity>> mapPostsBatch(List<Map<String, dynamic>> rows) async {
+  Future<List<PostEntity>> mapPostsBatch(
+    List<Map<String, dynamic>> rows, {
+    Map<String, String>? squadRoles,
+  }) async {
     if (rows.isEmpty) return [];
     final ids = rows.map((m) => m['id'] as String).toList();
     final myLiked = <String>{};
@@ -453,6 +543,7 @@ class PostRemoteDataSource {
         likedOverride: myLiked.contains(id),
         savedOverride: mySaved.contains(id),
         skipEngagementFetch: true,
+        squadRole: squadRoles?[m['author_id'] as String],
       ));
     }
     return out;
@@ -463,9 +554,11 @@ class PostRemoteDataSource {
     bool? likedOverride,
     bool? savedOverride,
     bool skipEngagementFetch = false,
+    String? squadRole,
   }) async {
     final profile = m['profiles'] as Map<String, dynamic>?;
     final community = m['communities'] as Map<String, dynamic>?;
+    final squad = m['squads'] as Map<String, dynamic>?;
     final mediaList = m['post_media'] as List? ?? [];
     final urls = <String>[];
     for (final pm in mediaList) {
@@ -505,6 +598,8 @@ class PostRemoteDataSource {
       authorAvatarUrl: profile?['avatar_url'] as String?,
       communityId: m['community_id'] as String?,
       communityName: community?['name'] as String?,
+      squadId: m['squad_id'] as String?,
+      squadName: squad?['name'] as String?,
       postType: m['post_type'] as String? ?? 'text',
       body: m['body'] as String?,
       mediaUrls: urls,
@@ -514,6 +609,9 @@ class PostRemoteDataSource {
       shareCount: m['share_count'] as int? ?? 0,
       likedByMe: liked,
       savedByMe: saved,
+      isAnnouncement: m['is_announcement'] as bool? ?? false,
+      isPinned: m['is_pinned'] as bool? ?? false,
+      authorSquadRole: squadRole,
       createdAt: DateTime.parse(m['created_at'] as String),
     );
   }

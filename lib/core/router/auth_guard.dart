@@ -12,14 +12,53 @@ class AuthGuard {
     final local = ref.read(localStorageProvider);
 
     final loggedIn = sessionManager.isAuthenticated;
-    final onboardingDone = await local.getOnboardingDone();
+    var onboardingDone = await local.getOnboardingDone();
+
+    // Local storage alone isn't reliable: a reinstall, a new device, or the
+    // user clearing app storage all reset it to false even though the
+    // profiles row already has onboarding_completed = true, which re-asks
+    // onboarding for someone who already finished it. Whenever local
+    // storage says "incomplete", check the server value and let it win —
+    // then sync local storage so we don't pay this round trip every route
+    // change.
+    if (loggedIn && !onboardingDone) {
+      try {
+        final client = ref.read(supabaseClientProvider);
+        final uid = client.auth.currentUser?.id;
+        if (uid != null) {
+          final row = await client
+              .from('profiles')
+              .select('onboarding_completed')
+              .eq('id', uid)
+              .maybeSingle();
+          final serverDone = row?['onboarding_completed'] as bool? ?? false;
+          if (serverDone) {
+            onboardingDone = true;
+            await local.setOnboardingDone(true);
+          }
+        }
+      } catch (_) {
+        // Offline or request failed — fall back to the local value so a
+        // network hiccup doesn't strand a logged-in user on a redirect loop.
+      }
+    }
 
     final loc = state.matchedLocation;
+
+    // The recovery deep link signs the user into a real session before this
+    // screen is shown, so without this check the "onboarding done -> leave
+    // auth screens" rule below would immediately bounce them off it toward
+    // home before they set a new password.
+    if (loc == Routes.resetPassword) {
+      return loggedIn ? null : Routes.login;
+    }
+
     final isAuthRoute = loc == Routes.login ||
         loc == Routes.signup ||
         loc == Routes.emailVerification ||
         loc == Routes.splash ||
-        loc == Routes.onboarding;
+        loc == Routes.onboarding ||
+        loc == Routes.forgotPassword;
 
     if (!loggedIn) {
       if (isAuthRoute) return null;

@@ -10,6 +10,7 @@ import 'auth_exception.dart';
 import 'database_exception.dart';
 import 'network_exception.dart';
 import 'validation_exception.dart';
+import './error_handler.dart';
 
 /// Central place to map raw errors → user-facing messages / AppException.
 ///
@@ -190,6 +191,8 @@ class ErrorHandler {
 
   static AppException _mapPostgrest(PostgrestException e) {
     final constraint = '${e.code} ${e.message} ${e.details}'.toLowerCase();
+    final raw = (e.message.isNotEmpty ? e.message : (e.details?.toString() ?? '')).trim();
+
     if (e.code == '23505' && constraint.contains('username')) {
       return const AuthException(
         message: 'That username is already taken. Please choose another one.',
@@ -202,9 +205,46 @@ class ErrorHandler {
         code: 'email_exists',
       );
     }
-    return const AuthException(
-      message: 'Something went wrong. Please try again.',
-      code: 'server_error',
+    if (e.code == '23505') {
+      return AuthException(
+        message: 'That value is already in use. Please try a different one.',
+        code: 'duplicate',
+        cause: e,
+      );
+    }
+    if (e.code == '42501' || constraint.contains('row-level security') || constraint.contains('permission denied')) {
+      return AuthException(
+        message: 'You do not have permission to do that.',
+        code: 'forbidden',
+        cause: e,
+      );
+    }
+    if (e.code == 'PGRST116' || constraint.contains('0 rows') || constraint.contains('not found')) {
+      return AuthException(
+        message: 'We could not find that item. It may have been deleted.',
+        code: 'not_found',
+        cause: e,
+      );
+    }
+    if (e.code == '57014' || constraint.contains('statement timeout')) {
+      return AuthException(
+        message: 'The server took too long to respond. Please try again.',
+        code: 'timeout',
+        cause: e,
+      );
+    }
+    // Prefer the Postgres/RPC message when it is already human-readable
+    // (e.g. raise exception 'Not authorized' from our admin RPCs).
+    if (raw.isNotEmpty &&
+        !raw.toLowerCase().startsWith('json') &&
+        raw.length < 180 &&
+        !raw.contains('{')) {
+      return AuthException(message: raw, code: e.code ?? 'db_error', cause: e);
+    }
+    return AuthException(
+      message: 'Something went wrong on the server. Please try again.',
+      code: e.code ?? 'server_error',
+      cause: e,
     );
   }
 

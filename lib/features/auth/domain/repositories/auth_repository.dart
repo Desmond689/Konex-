@@ -24,5 +24,7 @@ abstract class AuthRepository {
 
   Future<Result<void>> resetPassword(String email);
 
+  Future<Result<void>> updatePassword(String newPassword);
+
   Stream<AuthUserEntity?> authStateChanges();
 }

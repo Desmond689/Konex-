@@ -1,11 +1,11 @@
 {
-    "name": "konex",
-    "short_name": "konex",
+    "name": "KONEX",
+    "short_name": "KONEX",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A0A12",
+    "theme_color": "#8C6BFF",
+    "description": "KONEX — Play, Squad Up, Compete.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -1,8 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:postgrest/postgrest.dart';
 
-import '../errors/error_handler.dart';
 import '../errors/result.dart';
+import '../errors/error_handler.dart';
 
 /// Base helpers for repositories that talk to Supabase.
 mixin BaseRepository {

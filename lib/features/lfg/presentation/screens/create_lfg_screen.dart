@@ -7,6 +7,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_text_field.dart';
 import '../providers/lfg_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class CreateLfgScreen extends ConsumerStatefulWidget {
   const CreateLfgScreen({super.key});
@@ -58,7 +59,7 @@ class _CreateLfgScreenState extends ConsumerState<CreateLfgScreen> {
     setState(() => _loading = false);
     r.when(
       success: (_) => Navigator.of(context).pop(true),
-      failure: (e, _) => setState(() => _error = e.toString()),
+      failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
     );
   }
 

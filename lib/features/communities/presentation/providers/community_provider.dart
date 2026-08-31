@@ -29,3 +29,11 @@ final communityByIdProvider =
   final r = await ref.watch(communityRepositoryProvider).getById(id);
   return r.valueOrNull;
 });
+
+/// Admin > Manage games: every community, official or not, highest
+/// member count first. Keyed by the search query.
+final adminAllGamesProvider =
+    FutureProvider.family<List<CommunityEntity>, String?>((ref, q) async {
+  final r = await ref.watch(communityRepositoryProvider).adminListAllGames(query: q);
+  return r.valueOrNull ?? [];
+});

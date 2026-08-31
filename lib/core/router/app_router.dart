@@ -7,6 +7,8 @@ import '../../features/auth/presentation/screens/signup_screen.dart';
 import '../../features/auth/presentation/screens/email_verification_screen.dart';
 import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
+import '../../features/auth/presentation/screens/forgot_password_screen.dart';
+import '../../features/auth/presentation/screens/reset_password_screen.dart';
 import '../../features/feed/presentation/screens/home_feed_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
@@ -34,6 +36,7 @@ import '../../features/settings/presentation/biometric_settings_tile.dart';
 import '../../features/profile/presentation/screens/privacy_settings_screen.dart';
 import '../../features/settings/presentation/screens/delete_account_screen.dart';
 import '../../features/profile/presentation/screens/manage_games_screen.dart';
+import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../widgets/kx_shell.dart';
 import 'auth_guard.dart';
 import 'routes.dart';
@@ -58,6 +61,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(path: Routes.onboarding, builder: (_, __) => const OnboardingScreen()),
+      GoRoute(path: Routes.forgotPassword, builder: (_, __) => const ForgotPasswordScreen()),
+      GoRoute(path: Routes.resetPassword, builder: (_, __) => const ResetPasswordScreen()),
 
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
@@ -117,7 +122,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.editProfile, builder: (_, __) => const EditProfileScreen()),
       GoRoute(
         path: Routes.settings,
-        builder: (ctx, __) => Scaffold(
+        builder: (ctx, __) => Consumer(
+          builder: (ctx, ref, __) => Scaffold(
           appBar: AppBar(title: const Text('Settings')),
           body: ListView(
             children: [
@@ -167,14 +173,43 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               ListTile(
                 leading: const Icon(Icons.admin_panel_settings_outlined),
                 title: const Text('Admin'),
-                onTap: () => ctx.push('/admin'),
+                onTap: () => ctx.push(Routes.admin),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text('Log out', style: TextStyle(color: Colors.red)),
+                onTap: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: ctx,
+                    builder: (dialogCtx) => AlertDialog(
+                      title: const Text('Log out?'),
+                      content: const Text('You can log back in any time.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogCtx).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.of(dialogCtx).pop(true),
+                          child: const Text('Log out', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await ref.read(authControllerProvider.notifier).signOut();
+                    if (ctx.mounted) ctx.go(Routes.login);
+                  }
+                },
               ),
             ],
+          ),
           ),
         ),
       ),
       GoRoute(
-        path: '/admin',
+        path: Routes.admin,
         builder: (_, __) => const AdminDashboardScreen(),
       ),
       GoRoute(path: '/tournaments', builder: (_, __) => const TournamentsScreen()),

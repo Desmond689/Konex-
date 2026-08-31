@@ -150,6 +150,131 @@ class SquadRemoteDataSource {
     );
   }
 
+  Future<SquadEntity> updateSquad({
+    required String squadId,
+    String? name,
+    String? description,
+    String? rules,
+    String? primaryGame,
+    String? category,
+    bool? isPublic,
+    bool? requireApproval,
+    String? logoUrl,
+  }) async {
+    final mem = await _client
+        .from('squad_members')
+        .select('role')
+        .eq('squad_id', squadId)
+        .eq('user_id', _uid)
+        .maybeSingle();
+    if (mem == null || mem['role'] != 'owner') {
+      throw StateError('Only the squad owner can edit the squad');
+    }
+
+    String? communityId;
+    if (primaryGame != null) {
+      if (primaryGame.isEmpty) {
+        communityId = null;
+      } else {
+        final game = await _client
+            .from('communities')
+            .select('id')
+            .eq('game_name', primaryGame)
+            .eq('is_official', true)
+            .maybeSingle();
+        communityId = game?['id'] as String?;
+      }
+    }
+
+    final updates = <String, dynamic>{
+      if (name != null) 'name': name.trim(),
+      if (description != null) 'description': description.trim(),
+      if (rules != null) 'rules': rules.trim(),
+      if (logoUrl != null) 'logo_url': logoUrl,
+      if (primaryGame != null) 'primary_game': primaryGame.isEmpty ? null : primaryGame,
+      if (primaryGame != null) 'community_id': communityId,
+      if (category != null) 'category': category,
+      if (isPublic != null) 'is_public': isPublic,
+      if (requireApproval != null) 'require_approval': isPublic == false ? true : requireApproval,
+    };
+
+    if (updates.isEmpty) {
+      return getSquad(squadId);
+    }
+
+    final row = await _client
+        .from('squads')
+        .update(updates)
+        .eq('id', squadId)
+        .select(_select)
+        .single();
+
+    return SquadEntity.fromMap(
+      Map<String, dynamic>.from(row),
+      myRole: 'owner',
+      myStatus: 'active',
+    );
+  }
+
+  Future<void> deleteSquad(String squadId) async {
+    final mem = await _client
+        .from('squad_members')
+        .select('role')
+        .eq('squad_id', squadId)
+        .eq('user_id', _uid)
+        .maybeSingle();
+    if (mem == null || mem['role'] != 'owner') {
+      throw StateError('Only the squad owner can delete the squad');
+    }
+
+    final squad = await _client
+        .from('squads')
+        .select('name')
+        .eq('id', squadId)
+        .single();
+
+    final memberRows = await _client
+        .from('squad_members')
+        .select('user_id')
+        .eq('squad_id', squadId)
+        .eq('status', 'active');
+
+    // Soft-delete: keep the row (and its history/posts) but hide it from
+    // discovery and active-squad checks going forward.
+    await _client.from('squads').update({
+      'is_deleted': true,
+      'deleted_at': DateTime.now().toIso8601String(),
+    }).eq('id', squadId);
+
+    await _client
+        .from('squad_members')
+        .delete()
+        .eq('squad_id', squadId);
+
+    final squadName = squad['name'] as String? ?? 'Your squad';
+    final rows = [
+      for (final m in memberRows as List)
+        if ((m as Map)['user_id'] != _uid)
+          {
+            'user_id': m['user_id'],
+            'type': 'squad_deleted',
+            'title': squadName,
+            'body': '$squadName was deleted by its owner.',
+            'actor_id': _uid,
+            'target_type': 'squad',
+            'target_id': squadId,
+            'category': 'squad',
+          },
+    ];
+    if (rows.isNotEmpty) {
+      try {
+        await _client.from('notifications').insert(rows);
+      } catch (_) {
+        // Notification delivery is best-effort — the delete itself already succeeded.
+      }
+    }
+  }
+
   Future<String> uploadLogo(String filePath) async {
     final file = File(filePath);
     if (!file.existsSync()) {

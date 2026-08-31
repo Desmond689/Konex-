@@ -7,10 +7,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/config/dependency_injection.dart';
-import '../../../../core/errors/error_handler.dart';
 import '../../../../core/router/routes.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class EmailVerificationScreen extends ConsumerStatefulWidget {
   const EmailVerificationScreen({super.key, required this.email});

@@ -8,20 +8,30 @@ abstract class PostRepository {
   Future<Result<List<PostEntity>>> getForYouFeed({int page = 0, int pageSize = AppConstants.feedPageSize, String? communityFilter});
   Future<Result<List<PostEntity>>> getUserPosts(String userId, {int page = 0});
   Future<Result<List<PostEntity>>> getPostsByIds(List<String> ids);
+  Future<Result<List<PostEntity>>> getSquadPosts(String squadId, {int page = 0});
+  Future<Result<List<PostEntity>>> getCommunityPosts(String communityId, {int page = 0});
   Future<Result<PostEntity>> createTextPost({
     required String body,
     String? communityId,
+    String? squadId,
+    String postType = 'text',
+    bool isAnnouncement = false,
+    bool isPinned = false,
     String visibility = 'public',
   });
   Future<Result<PostEntity>> createImagePost({
     required String body,
     required String localImagePath,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   });
   Future<Result<PostEntity>> createMultiImagePost({
     required String body,
     required List<String> localImagePaths,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   });
   Future<Result<void>> deletePost(String postId);
   Future<Result<void>> likePost(String postId);

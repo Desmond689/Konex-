@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/config/constants.dart';
 import '../../../../core/config/dependency_injection.dart';
-import '../../../../core/errors/error_handler.dart';
 import '../../../../core/router/routes.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -12,6 +11,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_text_field.dart';
 import '../providers/auth_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -122,7 +122,24 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Center(child: Text('JOIN KONEX', style: AppTextStyles.brandSmall)),
+                  Center(
+                    child: Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            width: 56,
+                            height: 56,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text('JOIN KONEX', style: AppTextStyles.brandSmall),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Text('Create your gamer identity', style: AppTextStyles.display.copyWith(fontSize: 26)),
                   const SizedBox(height: 8),

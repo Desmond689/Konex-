@@ -18,6 +18,18 @@ abstract class SquadRepository {
     bool requireApproval,
     String? logoUrl,
   });
+  Future<Result<SquadEntity>> updateSquad({
+    required String squadId,
+    String? name,
+    String? description,
+    String? rules,
+    String? primaryGame,
+    String? category,
+    bool? isPublic,
+    bool? requireApproval,
+    String? logoUrl,
+  });
+  Future<Result<void>> deleteSquad(String squadId);
   Future<Result<String>> uploadLogo(String filePath);
   Future<Result<void>> requestJoin(String squadId, {String? message});
   Future<Result<void>> leave(String squadId);
@@ -76,6 +88,34 @@ class SquadRepositoryImpl with BaseRepository implements SquadRepository {
             requireApproval: requireApproval,
             logoUrl: logoUrl,
           ));
+
+  @override
+  Future<Result<SquadEntity>> updateSquad({
+    required String squadId,
+    String? name,
+    String? description,
+    String? rules,
+    String? primaryGame,
+    String? category,
+    bool? isPublic,
+    bool? requireApproval,
+    String? logoUrl,
+  }) =>
+      guard(() => _remote.updateSquad(
+            squadId: squadId,
+            name: name,
+            description: description,
+            rules: rules,
+            primaryGame: primaryGame,
+            category: category,
+            isPublic: isPublic,
+            requireApproval: requireApproval,
+            logoUrl: logoUrl,
+          ));
+
+  @override
+  Future<Result<void>> deleteSquad(String squadId) =>
+      guard(() => _remote.deleteSquad(squadId));
 
   @override
   Future<Result<String>> uploadLogo(String filePath) =>

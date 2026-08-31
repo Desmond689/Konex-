@@ -9,6 +9,7 @@ import '../../../../core/widgets/kx_text_field.dart';
 import '../providers/profile_provider.dart';
 import 'manage_games_screen.dart';
 import 'privacy_settings_screen.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -67,7 +68,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ref.invalidate(myProfileProvider);
       },
       failure: (e, _) {
-        setState(() => _error = e.toString());
+        setState(() => _error = ErrorHandler.userMessage(e));
       },
     );
     if (mounted) setState(() => _loading = false);
@@ -90,7 +91,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ref.invalidate(myProfileProvider);
       },
       failure: (e, _) {
-        setState(() => _error = e.toString());
+        setState(() => _error = ErrorHandler.userMessage(e));
       },
     );
     if (mounted) setState(() => _loading = false);
@@ -114,7 +115,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         ref.invalidate(myProfileProvider);
         Navigator.of(context).pop(true);
       },
-      failure: (e, _) => setState(() => _error = e.toString()),
+      failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
     );
   }
 
@@ -167,7 +168,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             const SnackBar(content: Text('Username updated')),
                           );
                         },
-                        failure: (e, _) => setState(() => _error = e.toString()),
+                        failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
                       );
                     },
               child: const Text('Change username'),

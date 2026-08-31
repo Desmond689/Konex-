@@ -85,7 +85,14 @@ class AuthRemoteDataSource {
   }
 
   Future<void> resetPassword(String email) async {
-    await _client.auth.resetPasswordForEmail(email);
+    await _client.auth.resetPasswordForEmail(
+      email,
+      redirectTo: 'https://konex-app-rho.vercel.app/auth/callback?type=recovery',
+    );
+  }
+
+  Future<void> updatePassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   Stream<AuthUserEntity?> authStateChanges() {

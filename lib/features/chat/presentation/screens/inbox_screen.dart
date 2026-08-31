@@ -9,6 +9,7 @@ import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../../domain/entities/chat_entity.dart';
 import '../providers/chat_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
@@ -36,7 +37,7 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () => ref.invalidate(inboxProvider),
         ),
         data: (list) {

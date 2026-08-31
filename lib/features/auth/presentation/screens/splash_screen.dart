@@ -35,19 +35,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (!mounted) return;
 
     final session = ref.read(sessionManagerProvider);
-    final local = ref.read(localStorageProvider);
     final valid = await session.validateSession();
-    final onboardingDone = await local.getOnboardingDone();
 
     if (!mounted) return;
     if (!valid) {
       context.go(Routes.login);
       return;
     }
-    if (!onboardingDone) {
-      context.go(Routes.onboarding);
-      return;
-    }
+    // Don't decide onboarding-vs-home here — that decision already lives in
+    // AuthGuard.redirect(), which every navigation (including this one)
+    // passes through anyway. Deciding it a second time, here, using only
+    // the local "onboarding done" flag, used to race that logic: this
+    // screen would send someone straight to onboarding on nothing more
+    // than a stale/reset local flag, while AuthGuard's version of the same
+    // check falls back to the server value first. Having two paths made
+    // that safety net inconsistent — someone who'd already finished
+    // onboarding could still get dropped back into the "choose your
+    // platform / pick your games" flow after a reinstall or a cleared app
+    // cache, purely because this screen's check ran without ever asking
+    // the server. Always heading to home and letting AuthGuard reroute to
+    // onboarding only when the (server-checked) flag actually says
+    // incomplete keeps that decision in one place.
     context.go(Routes.home);
   }
 
@@ -80,24 +88,33 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 88,
-                  height: 88,
+                  width: 100,
+                  height: 100,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(24),
-                    gradient: const LinearGradient(
-                      colors: [AppColors.primary, AppColors.secondary],
-                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                        blurRadius: 32,
+                        color: AppColors.primary.withValues(alpha: 0.45),
+                        blurRadius: 36,
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.sports_esports_rounded,
-                    size: 44,
-                    color: Colors.white,
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: AppColors.primary,
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'K',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 48,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),

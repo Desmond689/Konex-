@@ -20,7 +20,7 @@ class StoryRemoteDataSource {
         .select(
           'id, user_id, media_type, media_url, text_content, background_color, '
           'privacy, community_id, view_count, created_at, expires_at, '
-          'profiles!stories_user_id_fkey(username, gamer_name, avatar_url)',
+          'profiles!stories_user_id_fkey(username, gamer_name, avatar_url, last_seen)',
         )
         .gt('expires_at', DateTime.now().toIso8601String())
         .order('created_at', ascending: false)
@@ -104,6 +104,7 @@ class StoryRemoteDataSource {
         displayName: name,
         avatarUrl: p['avatar_url'] as String?,
         stories: entry.value,
+        lastSeen: p['last_seen'] != null ? DateTime.tryParse(p['last_seen'] as String) : null,
       ));
     }
 

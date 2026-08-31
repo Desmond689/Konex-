@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_text_styles.dart';
 import '../providers/profile_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 enum FollowListMode { followers, following }
 
@@ -48,7 +49,7 @@ class _FollowListScreenState extends ConsumerState<FollowListScreen> {
         _loading = false;
       }),
       failure: (e, _) => setState(() {
-        _error = e.toString();
+        _error = ErrorHandler.userMessage(e);
         _loading = false;
       }),
     );

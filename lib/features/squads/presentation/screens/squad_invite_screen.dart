@@ -8,6 +8,7 @@ import '../../../../core/deep_links/deep_link_models.dart';
 import '../../../../core/deep_links/share_service.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class SquadInviteScreen extends ConsumerStatefulWidget {
   const SquadInviteScreen({super.key, required this.squadId, this.squadName});
@@ -44,7 +45,7 @@ class _SquadInviteScreenState extends ConsumerState<SquadInviteScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = ErrorHandler.userMessage(e);
         _loading = false;
       });
     }
@@ -145,7 +146,7 @@ class _RedeemSquadInviteScreenState extends ConsumerState<RedeemSquadInviteScree
       context.go('/squad/$sid');
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = ErrorHandler.userMessage(e));
     }
   }
 

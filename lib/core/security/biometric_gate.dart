@@ -26,6 +26,18 @@ class BiometricGate {
   /// Returns true if unlocked or biometric not required.
   Future<bool> requireUnlock({String reason = 'Unlock KONEX'}) async {
     if (!await isEnabled()) return true;
+    return _authenticate(reason);
+  }
+
+  /// Prompts biometric auth right now, regardless of whether the lock is
+  /// currently enabled in storage. Use this when *turning on* the setting,
+  /// since [requireUnlock] would short-circuit to true (nothing is enabled
+  /// yet at that point) and skip the prompt entirely.
+  Future<bool> authenticateNow({String reason = 'Confirm to enable'}) {
+    return _authenticate(reason);
+  }
+
+  Future<bool> _authenticate(String reason) async {
     try {
       return await _auth.authenticate(
         localizedReason: reason,

@@ -8,6 +8,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../providers/story_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class CreateStoryScreen extends ConsumerStatefulWidget {
   const CreateStoryScreen({super.key});
@@ -101,13 +102,13 @@ class _CreateStoryScreenState extends ConsumerState<CreateStoryScreen> {
           ref.invalidate(homeStoryRingsProvider);
           Navigator.of(context).pop(true);
         },
-        failure: (e, _) => setState(() => _error = e.toString()),
+        failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
       );
     } catch (e) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = e.toString();
+          _error = ErrorHandler.userMessage(e);
         });
       }
     }

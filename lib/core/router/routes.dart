@@ -5,6 +5,8 @@ abstract final class Routes {
   static const String login = '/login';
   static const String signup = '/signup';
   static const String emailVerification = '/email-verification';
+  static const String forgotPassword = '/forgot-password';
+  static const String resetPassword = '/reset-password';
 
   static const String home = '/home';
   static const String discover = '/discover';
@@ -19,6 +21,7 @@ abstract final class Routes {
   static const String saved = '/saved';
   static const String editProfile = '/profile/edit';
   static const String lfg = '/lfg';
+  static const String admin = '/admin';
 
   static const String communityDetail = '/community/:id';
   static const String squadDetail = '/squad/:id';

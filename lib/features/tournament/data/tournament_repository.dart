@@ -54,26 +54,17 @@ class TournamentRepository with BaseRepository {
         );
       });
 
+  // The full-vs-not-full / already-entered check and the participant_count
+  // increment happen together, server-side, inside a row lock — see
+  // enter_tournament() in the migrations. Doing this as a client-side
+  // read-then-write (fetch count, compare, write count+1) would race: two
+  // people joining a nearly-full tournament at the same moment could both
+  // read the same count and both write the same value, silently
+  // undercounting entries and letting the tournament exceed its cap.
   Future<Result<void>> enter(String tournamentId) => guard(() async {
-        final t = await getById(tournamentId);
-        final tournament = t.valueOrNull;
-        if (tournament == null) throw StateError('Tournament not found');
-        if (!tournament.isOpen) throw StateError('Tournament not open');
-        if (tournament.isEntered) return;
-        if (tournament.participantCount >= tournament.maxParticipants) {
-          throw StateError('Tournament full');
-        }
-
-        await _client.from('tournament_entries').upsert({
-          'tournament_id': tournamentId,
-          'user_id': _uid,
-          'status': 'joined',
+        await _client.rpc('enter_tournament', params: {
+          'p_tournament_id': tournamentId,
         });
-
-        await _client.from('tournaments').update({
-          'participant_count': tournament.participantCount + 1,
-          'updated_at': DateTime.now().toIso8601String(),
-        }).eq('id', tournamentId);
       });
 
   Future<Result<String>> createTournament({

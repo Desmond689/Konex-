@@ -30,14 +30,30 @@ class PostRepositoryImpl with BaseRepository implements PostRepository {
       guard(() => _remote.getPostsByIds(ids));
 
   @override
+  Future<Result<List<PostEntity>>> getSquadPosts(String squadId, {int page = 0}) =>
+      guard(() => _remote.getSquadPosts(squadId, page: page));
+
+  @override
+  Future<Result<List<PostEntity>>> getCommunityPosts(String communityId, {int page = 0}) =>
+      guard(() => _remote.getCommunityPosts(communityId, page: page));
+
+  @override
   Future<Result<PostEntity>> createTextPost({
     required String body,
     String? communityId,
+    String? squadId,
+    String postType = 'text',
+    bool isAnnouncement = false,
+    bool isPinned = false,
     String visibility = 'public',
   }) =>
       guard(() => _remote.createTextPost(
             body: body,
             communityId: communityId,
+            squadId: squadId,
+            postType: postType,
+            isAnnouncement: isAnnouncement,
+            isPinned: isPinned,
             visibility: visibility,
           ));
 
@@ -46,11 +62,15 @@ class PostRepositoryImpl with BaseRepository implements PostRepository {
     required String body,
     required String localImagePath,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   }) =>
       guard(() => _remote.createImagePost(
             body: body,
             localImagePath: localImagePath,
             communityId: communityId,
+            squadId: squadId,
+            postType: postType,
           ));
 
   @override
@@ -58,11 +78,15 @@ class PostRepositoryImpl with BaseRepository implements PostRepository {
     required String body,
     required List<String> localImagePaths,
     String? communityId,
+    String? squadId,
+    String postType = 'image',
   }) =>
       guard(() => _remote.createMultiImagePost(
             body: body,
             localImagePaths: localImagePaths,
             communityId: communityId,
+            squadId: squadId,
+            postType: postType,
           ));
 
   @override

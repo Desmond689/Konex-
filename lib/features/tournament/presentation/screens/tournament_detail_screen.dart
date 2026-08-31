@@ -8,6 +8,7 @@ import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_error_view.dart';
 import '../../domain/tournament_entity.dart';
 import '../providers/tournament_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 final tournamentDetailProvider =
     FutureProvider.family<TournamentEntity?, String>((ref, id) async {
@@ -62,7 +63,7 @@ class _TournamentDetailScreenState
       error: (e, _) => Scaffold(
         appBar: AppBar(),
         body: KxErrorView(
-          message: e.toString(),
+          message: ErrorHandler.userMessage(e),
           onRetry: () =>
               ref.invalidate(tournamentDetailProvider(widget.tournamentId)),
         ),

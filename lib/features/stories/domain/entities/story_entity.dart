@@ -66,7 +66,7 @@ class StoryRing extends Equatable {
     this.avatarUrl,
     required this.stories,
     this.isMe = false,
-    this.isOnline = false,
+    this.lastSeen,
   });
 
   final String userId;
@@ -74,7 +74,12 @@ class StoryRing extends Equatable {
   final String? avatarUrl;
   final List<StoryEntity> stories;
   final bool isMe;
-  final bool isOnline;
+  // Same real heartbeat as ProfileEntity.lastSeen (see PresenceService) —
+  // "online" here is never a stored/default flag, only this computed check.
+  final DateTime? lastSeen;
+
+  bool get isOnline =>
+      lastSeen != null && DateTime.now().toUtc().difference(lastSeen!.toUtc()) < const Duration(minutes: 2);
 
   bool get hasUnseen => stories.any((s) => !s.viewedByMe);
   bool get hasStories => stories.isNotEmpty;

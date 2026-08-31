@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/color_utils.dart';
 import '../../domain/entities/story_entity.dart';
 import '../providers/story_provider.dart';
 
@@ -26,26 +28,126 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
   late AnimationController _progress;
   bool _paused = false;
 
+  // Guards against a controller from a superseded story finishing init
+  // after the user has already swiped away (fast-swipe race condition).
+  int _loadToken = 0;
+  VideoPlayerController? _videoController;
+  bool _videoBuffering = false;
+
   StoryRing get _ring => widget.rings[_ringIndex];
   StoryEntity get _story => _ring.stories[_storyIndex];
 
   @override
   void initState() {
     super.initState();
-    _ringIndex = widget.initialRingIndex.clamp(0, widget.rings.length - 1);
-    _storyIndex = 0;
     _progress = AnimationController(vsync: this, duration: const Duration(seconds: 5))
       ..addStatusListener((s) {
         if (s == AnimationStatus.completed) _next();
       });
+    // Defensive: every current call site filters to non-empty rings before
+    // navigating here, but this guards against a future caller (or a stale
+    // list) passing an empty list, which would otherwise crash immediately
+    // — clamp(0, -1) throws, and _ring/_story index into an empty list.
+    if (widget.rings.isEmpty) {
+      _ringIndex = 0;
+      _storyIndex = 0;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.of(context).maybePop();
+      });
+      return;
+    }
+    _ringIndex = widget.initialRingIndex.clamp(0, widget.rings.length - 1);
+    _storyIndex = 0;
     _start();
   }
 
   void _start() {
-    _progress
-      ..reset()
-      ..forward();
-    ref.read(storyRepositoryProvider).markViewed(_story.id);
+    _progress.stop();
+    _disposeVideo();
+
+    final story = _story;
+    if (story.mediaType == 'video' && story.mediaUrl != null) {
+      _startVideo(story.mediaUrl!);
+    } else {
+      _progress.duration = const Duration(seconds: 5);
+      _progress
+        ..reset()
+        ..forward();
+    }
+    ref.read(storyRepositoryProvider).markViewed(story.id);
+  }
+
+  Future<void> _startVideo(String url) async {
+    final token = ++_loadToken;
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await controller.initialize();
+      // The user may have swiped to a different story while this awaited.
+      if (!mounted || token != _loadToken) {
+        await controller.dispose();
+        return;
+      }
+      controller.addListener(_onVideoTick);
+      setState(() {
+        _videoController = controller;
+        _videoBuffering = false;
+      });
+      // Match the progress bar's duration to the video's real length instead
+      // of the hardcoded 5s used for photo/text stories.
+      final duration = controller.value.duration;
+      _progress.duration = duration > Duration.zero ? duration : const Duration(seconds: 5);
+      _progress
+        ..reset()
+        ..forward();
+      if (!_paused) {
+        await controller.play();
+      }
+    } catch (_) {
+      if (!mounted || token != _loadToken) return;
+      await controller.dispose();
+      // Fall back to a timed advance so playback doesn't get stuck on a
+      // story whose video failed to load.
+      setState(() {
+        _videoController = null;
+        _videoBuffering = false;
+      });
+      _progress.duration = const Duration(seconds: 5);
+      _progress
+        ..reset()
+        ..forward();
+    }
+  }
+
+  void _onVideoTick() {
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) return;
+    final isBuffering = controller.value.isBuffering;
+    if (isBuffering != _videoBuffering) {
+      _onVideoBuffering(isBuffering);
+    }
+  }
+
+  void _onVideoBuffering(bool buffering) {
+    setState(() => _videoBuffering = buffering);
+    if (_paused) return;
+    // Pause the progress-bar animation while the video rebuffers so the
+    // bar doesn't race ahead of the frozen picture, and resume once ready.
+    if (buffering) {
+      _progress.stop();
+    } else {
+      _progress.forward();
+    }
+  }
+
+  void _disposeVideo() {
+    _loadToken++;
+    final controller = _videoController;
+    _videoController = null;
+    _videoBuffering = false;
+    if (controller != null) {
+      controller.removeListener(_onVideoTick);
+      controller.dispose();
+    }
   }
 
   void _next() {
@@ -81,20 +183,28 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
       _paused = !_paused;
       if (_paused) {
         _progress.stop();
+        _videoController?.pause();
       } else {
-        _progress.forward();
+        if (!_videoBuffering) _progress.forward();
+        _videoController?.play();
       }
     });
   }
 
   @override
   void dispose() {
+    _disposeVideo();
     _progress.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (widget.rings.isEmpty) {
+      // initState already scheduled a pop; render an empty black frame for
+      // the one tick before that runs instead of indexing into nothing.
+      return const Scaffold(backgroundColor: Colors.black);
+    }
     final story = _story;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -111,10 +221,12 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
         },
         onLongPressStart: (_) {
           _progress.stop();
+          _videoController?.pause();
           setState(() => _paused = true);
         },
         onLongPressEnd: (_) {
-          _progress.forward();
+          if (!_videoBuffering) _progress.forward();
+          _videoController?.play();
           setState(() => _paused = false);
         },
         child: Stack(
@@ -130,17 +242,13 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
                 ),
               )
             else if (story.mediaType == 'video' && story.mediaUrl != null)
-              Container(
-                color: Colors.black,
-                child: const Center(
-                  child: Icon(Icons.play_circle_outline, color: Colors.white, size: 72),
-                ),
+              _StoryVideoContent(
+                controller: _videoController,
+                buffering: _videoBuffering,
               )
             else
               Container(
-                color: Color(
-                  int.parse((story.backgroundColor ?? '#7C3AED').replaceFirst('#', '0xFF')),
-                ),
+                color: safeHexColor(story.backgroundColor),
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(32),
                 child: Text(
@@ -283,6 +391,46 @@ class _StoryViewerScreenState extends ConsumerState<StoryViewerScreen>
         Icon(icon, color: Colors.white, size: 28),
         const SizedBox(height: 4),
         Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+/// Renders the real video for a video story, with a spinner while the
+/// controller is still initializing and a subtle buffering overlay once
+/// playback has started but the player has run dry on data.
+class _StoryVideoContent extends StatelessWidget {
+  const _StoryVideoContent({required this.controller, required this.buffering});
+
+  final VideoPlayerController? controller;
+  final bool buffering;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    if (c == null || !c.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.white70),
+        ),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: c.value.size.width,
+            height: c.value.size.height,
+            child: VideoPlayer(c),
+          ),
+        ),
+        if (buffering)
+          const Center(
+            child: CircularProgressIndicator(color: Colors.white70),
+          ),
       ],
     );
   }

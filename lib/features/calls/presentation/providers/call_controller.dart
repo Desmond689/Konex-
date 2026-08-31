@@ -13,6 +13,7 @@ import '../screens/in_call_screen.dart';
 import '../screens/outgoing_call_screen.dart';
 import '../services/call_signaling_service.dart';
 import '../services/webrtc_service.dart';
+import '../../../../core/errors/error_handler.dart';
 
 final callControllerProvider =
     StateNotifierProvider<CallController, CallState>((ref) {
@@ -65,6 +66,36 @@ class CallController extends StateNotifier<CallState> {
   GlobalKey<NavigatorState>? navigatorKey;
   Timer? _durationTimer;
   DateTime? _connectedAt;
+  StreamSubscription? _meshSub;
+
+  /// Mesh call wiring for group (squad) calls: whenever a peer announces
+  /// they're ready, the side with the higher UUID sends the offer (glare
+  /// avoidance) so every pair in the call ends up with a peer connection.
+  ///
+  /// Previously this was only ever set up inside [startSquadCall], so a
+  /// participant who *joined* an existing call via [acceptIncoming] instead
+  /// of starting it never listened for peer-ready at all. Two people who
+  /// both joined (neither one started the call) would never exchange
+  /// offers with each other — their audio just never connected. Calling
+  /// this from both start and accept paths fixes that. The previous
+  /// subscription is also cancelled first: without that, starting or
+  /// joining a second call while this controller is alive stacked a new
+  /// listener on top of the old one, sending duplicate/stale offers.
+  void _wireMeshOffering() {
+    _meshSub?.cancel();
+    _meshSub = _signaling.events.listen((e) async {
+      if (e['type'] != 'peer-ready') return;
+      final peerId = e['from'] as String?;
+      final me = _client.auth.currentUser?.id;
+      if (peerId == null || me == null || peerId == me) return;
+      if (me.compareTo(peerId) > 0) {
+        try {
+          final offer = await _webrtc.createOffer(peerId);
+          await _signaling.sendOffer(peerId, offer);
+        } catch (_) {}
+      }
+    });
+  }
 
   void _startDurationTimer() {
     _durationTimer?.cancel();
@@ -227,7 +258,7 @@ class CallController extends StateNotifier<CallState> {
         // timeout or cancelled — leave hangup to user cancel
       }
     } catch (e) {
-      state = state.copyWith(error: e.toString(), phase: CallUiPhase.idle);
+      state = state.copyWith(error: ErrorHandler.userMessage(e), phase: CallUiPhase.idle);
     }
   }
 
@@ -265,23 +296,9 @@ class CallController extends StateNotifier<CallState> {
           builder: (_) => InCallScreen(call: call),
         ),
       );
-      // Mesh: when other members announce peer-ready, offer to them (initiator only
-      // offers to avoid glare; lower userId offers if both join same time)
-      _signaling.events.listen((e) async {
-        if (e['type'] != 'peer-ready') return;
-        final peerId = e['from'] as String?;
-        if (peerId == null || peerId == _client.auth.currentUser?.id) return;
-        final me = _client.auth.currentUser!.id;
-        // Deterministic: only the higher UUID sends offer (glare avoidance)
-        if (me.compareTo(peerId) > 0) {
-          try {
-            final offer = await _webrtc.createOffer(peerId);
-            await _signaling.sendOffer(peerId, offer);
-          } catch (_) {}
-        }
-      });
+      _wireMeshOffering();
     } catch (e) {
-      state = state.copyWith(error: e.toString(), phase: CallUiPhase.idle);
+      state = state.copyWith(error: ErrorHandler.userMessage(e), phase: CallUiPhase.idle);
     }
   }
 
@@ -303,7 +320,7 @@ class CallController extends StateNotifier<CallState> {
         ),
       );
     } catch (e) {
-      state = state.copyWith(error: e.toString());
+      state = state.copyWith(error: ErrorHandler.userMessage(e));
     }
   }
 
@@ -314,7 +331,12 @@ class CallController extends StateNotifier<CallState> {
     await _client.rpc('answer_call', params: {'p_call_id': call.id});
     await _webrtc.initLocalAudio();
     await _signaling.joinCallChannel(call.id);
-    // For DM, wait for offer from caller via signaling
+    // For DM, the caller sends the offer once it sees our peer-ready
+    // broadcast; joinCallChannel already announces that. For a squad
+    // (group) call there can be other members who *also* joined rather
+    // than started the call, so this side needs the same mesh-offering
+    // logic the initiator uses, or those pairs never connect.
+    if (call.callType == 'squad') _wireMeshOffering();
     state = state.copyWith(phase: CallUiPhase.connected);
     _startDurationTimer();
     navigatorKey?.currentState?.pushReplacement(
@@ -364,6 +386,8 @@ class CallController extends StateNotifier<CallState> {
   }
 
   Future<void> _cleanup() async {
+    await _meshSub?.cancel();
+    _meshSub = null;
     await _signaling.leave();
     await _webrtc.hangUp();
     state = const CallState();
@@ -373,6 +397,7 @@ class CallController extends StateNotifier<CallState> {
   @override
   void dispose() {
     _stopDurationTimer();
+    _meshSub?.cancel();
     _inboxChannel?.unsubscribe();
     _signaling.dispose();
     _webrtc.dispose();

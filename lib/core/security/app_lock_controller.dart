@@ -41,9 +41,15 @@ class AppLockController extends StateNotifier<AppLockState> {
     return ok;
   }
 
-  Future<void> setEnabled(bool enabled) async {
+  /// [locked] controls whether the lock overlay should appear immediately.
+  /// Pass `false` right after the user has just confirmed with a live
+  /// biometric prompt (e.g. when turning the setting on) — they're already
+  /// unlocked and shouldn't be dropped straight onto the lock screen they
+  /// have no way to dismiss. Defaults to mirroring [enabled] for the normal
+  /// case of disabling the lock.
+  Future<void> setEnabled(bool enabled, {bool? locked}) async {
     await _storage.setBiometricEnabled(enabled);
-    state = AppLockState(enabled: enabled, locked: enabled);
+    state = AppLockState(enabled: enabled, locked: locked ?? enabled);
   }
 }
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/errors/result.dart';
@@ -32,7 +34,12 @@ class CommunityRepository with BaseRepository {
             'name.ilike.%${query.trim()}%,game_name.ilike.%${query.trim()}%',
           );
         }
-        final rows = await q.order('member_count', ascending: false).limit(50);
+        // Communities with the most members always show first; name breaks ties
+        // so the order stays stable for newly-added games that start at 0.
+        final rows = await q
+            .order('member_count', ascending: false)
+            .order('name', ascending: true)
+            .limit(50);
         final out = <CommunityEntity>[];
         for (final r in rows as List) {
           out.add(await _enrich(Map<String, dynamic>.from(r as Map)));
@@ -205,6 +212,7 @@ class CommunityRepository with BaseRepository {
     String? rules,
     String? category,
     List<String> platforms = const [],
+    String? avatarUrl,
   }) =>
       guard(() async {
         final slug = name
@@ -219,7 +227,90 @@ class CommunityRepository with BaseRepository {
           'p_category': category,
           'p_platforms': platforms,
         });
+        // The create RPC doesn't take a logo (it predates logo uploads) —
+        // set it as a follow-up update so callers can still create a
+        // fully-branded community in one screen.
+        if (avatarUrl != null && avatarUrl.isNotEmpty) {
+          await _client.rpc('admin_update_game', params: {
+            'p_community_id': id,
+            'p_avatar_url': avatarUrl,
+          });
+        }
         return id as String;
+      });
+
+  /// Staff: upload a logo image for a game/community. Returns the public URL —
+  /// pass it to [adminUpdateGame] (or the create flow) as `avatarUrl`.
+  Future<Result<String>> uploadLogo(String filePath) => guard(() async {
+        final file = File(filePath);
+        if (!file.existsSync()) {
+          throw StateError('File not found');
+        }
+        final ext = filePath.split('.').last.toLowerCase();
+        const allowed = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
+        if (!allowed.contains(ext)) {
+          throw StateError('Unsupported image format. Use JPG, PNG, GIF, or WebP.');
+        }
+        final fileName =
+            'community_logo_${_uid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+        final bytes = await file.readAsBytes();
+        await _client.storage.from('community-logos').uploadBinary(
+              fileName,
+              bytes,
+              fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+            );
+        return _client.storage.from('community-logos').getPublicUrl(fileName);
+      });
+
+  /// Staff: edit an existing game/community (name, description, rules,
+  /// category, platforms, logo/banner, region, privacy). Every field is
+  /// optional — only what's passed gets changed.
+  Future<Result<void>> adminUpdateGame({
+    required String communityId,
+    String? name,
+    String? description,
+    String? rules,
+    String? category,
+    List<String>? platforms,
+    String? avatarUrl,
+    String? bannerUrl,
+    String? primaryRegion,
+    bool? isPrivate,
+    bool? requireApproval,
+  }) =>
+      guard(() async {
+        await _client.rpc('admin_update_game', params: {
+          'p_community_id': communityId,
+          'p_name': name,
+          'p_description': description,
+          'p_rules': rules,
+          'p_category': category,
+          'p_platforms': platforms,
+          'p_avatar_url': avatarUrl,
+          'p_banner_url': bannerUrl,
+          'p_primary_region': primaryRegion,
+          'p_is_private': isPrivate,
+          'p_require_approval': requireApproval,
+        });
+      });
+
+  /// Staff: every game/community (official or not), for the "Manage games"
+  /// admin screen. Highest member count first, same ordering as Discover.
+  Future<Result<List<CommunityEntity>>> adminListAllGames({String? query}) =>
+      guard(() async {
+        var q = _client.from('communities').select(_cols).eq('is_archived', false);
+        if (query != null && query.trim().isNotEmpty) {
+          q = q.or(
+            'name.ilike.%${query.trim()}%,game_name.ilike.%${query.trim()}%',
+          );
+        }
+        final rows = await q
+            .order('member_count', ascending: false)
+            .order('name', ascending: true)
+            .limit(300);
+        return (rows as List)
+            .map((r) => CommunityEntity.fromMap(Map<String, dynamic>.from(r as Map)))
+            .toList();
       });
 
   Future<CommunityEntity> _enrich(Map<String, dynamic> m) async {

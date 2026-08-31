@@ -10,6 +10,7 @@ import '../../../../core/utils/validators.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_text_field.dart';
 import '../providers/squad_provider.dart';
+import '../../../../core/errors/error_handler.dart';
 
 class CreateSquadScreen extends ConsumerStatefulWidget {
   const CreateSquadScreen({super.key});
@@ -91,7 +92,7 @@ class _CreateSquadScreenState extends ConsumerState<CreateSquadScreen> {
     setState(() => _loading = false);
     result.when(
       success: (_) => Navigator.of(context).pop(true),
-      failure: (e, _) => setState(() => _error = e.toString()),
+      failure: (e, _) => setState(() => _error = ErrorHandler.userMessage(e)),
     );
   }
 
