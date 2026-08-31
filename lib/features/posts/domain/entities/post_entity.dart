@@ -48,6 +48,7 @@ class PostEntity extends Equatable {
   final bool isPinned;
   /// Role of the author within [squadId], when known ('owner' | 'moderator' | 'member').
   final String? authorSquadRole;
+  final DateTime createdAt;
 
   String get authorDisplay =>
       (authorGamerName?.isNotEmpty == true) ? authorGamerName! : authorUsername;
@@ -99,7 +100,7 @@ class PostEntity extends Equatable {
       visibility: visibility,
       likeCount: likeCount ?? this.likeCount,
       commentCount: commentCount ?? this.commentCount,
-      shareCount: shareCount,
+      shareCount: shareCount ?? this.shareCount,
       likedByMe: likedByMe ?? this.likedByMe,
       savedByMe: savedByMe ?? this.savedByMe,
       isAnnouncement: isAnnouncement,
