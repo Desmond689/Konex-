@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 
 import '../errors/auth_exception.dart';
@@ -44,7 +46,12 @@ class SessionManager {
     final session = currentSession;
     if (session == null) return false;
     try {
-      final res = await _supabase.auth.getUser();
+      final res = await _supabase.auth.getUser().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {
+          throw TimeoutException('Supabase auth check timed out');
+        },
+      );
       return res.user != null;
     } catch (_) {
       await clearSession();
