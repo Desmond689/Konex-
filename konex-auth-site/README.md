@@ -2,6 +2,9 @@
 
 A small React + Vite site for **Konex**:
 
+Deploy from the repository `main` branch with Vercel's Root Directory set to
+`konex-auth-site`.
+
 - `/` — landing page with the logo, a short pitch, Android APK download, and installation instructions
 - `/about` — About Konex, its vision, features, and download links
 - `/auth/callback` — the page Supabase redirects to after someone taps an
