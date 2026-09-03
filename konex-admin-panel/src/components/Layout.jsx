@@ -5,7 +5,7 @@ import { useAuth, can } from "../lib/AuthContext";
 import { useOpenReportCount } from "../lib/hooks";
 
 const NAV = [
-  { to: "/dashboard", label: "Dashboard", icon: DashboardIcon, end: true },
+  { to: "/", label: "Dashboard", icon: DashboardIcon, end: true },
   { to: "/reports", label: "Report queue", icon: FlagIcon, countKey: "reports" },
   { to: "/users", label: "Users", icon: UsersIcon },
   { to: "/staff", label: "Staff", icon: StaffIcon, staffOnly: true },

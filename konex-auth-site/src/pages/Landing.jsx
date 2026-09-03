@@ -1,5 +1,6 @@
 import Logo from '../components/Logo'
 import ConstellationField from '../components/ConstellationField'
+import { Link } from 'react-router-dom'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/konex'
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.konex.app'
@@ -16,7 +17,8 @@ export default function Landing() {
           </a>
           <div className="nav-links">
             <a href="#get-started">Get started</a>
-            <a href={PLAY_STORE_URL} className="btn btn-ghost">Log in</a>
+            <Link to="/about">About Konex</Link>
+            <a href={PLAY_STORE_URL} className="btn btn-ghost">Download app</a>
           </div>
         </nav>
 
@@ -39,6 +41,16 @@ export default function Landing() {
           <div className="hero-visual">
             <HeroMark />
           </div>
+        </section>
+      </div>
+
+      <div className="wrap">
+        <section className="home-intro">
+          <div>
+            <div className="eyebrow">MORE THAN A GAME</div>
+            <h2>One place for your whole gaming life.</h2>
+          </div>
+          <p>Discover communities, share your best moments, and stay close to the people you play with. Konex brings your gaming world together.</p>
         </section>
       </div>
 

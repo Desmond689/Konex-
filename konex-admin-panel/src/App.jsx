@@ -11,8 +11,6 @@ import Squads from "./pages/Squads";
 import Games from "./pages/Games";
 import GameForm from "./pages/GameForm";
 import Audit from "./pages/Audit";
-import Landing from "./pages/Landing";
-import About from "./pages/About";
 
 export default function App() {
   return (
@@ -20,9 +18,6 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Landing />} />
-          <Route path="/home" element={<Landing />} />
-          <Route path="/about" element={<About />} />
           <Route
             element={
               <RequireStaff>
@@ -30,7 +25,7 @@ export default function App() {
               </RequireStaff>
             }
           >
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<Users />} />
             <Route path="/staff" element={<Staff />} />

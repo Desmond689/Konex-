@@ -336,6 +336,70 @@ button {
   color: var(--text-muted);
 }
 
+/* ---------- about and landing additions ---------- */
+.home-intro {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 50px;
+  padding: 64px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.home-intro h2, .about-section h2 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 44px);
+  line-height: 1.08;
+  letter-spacing: -.03em;
+  margin: 14px 0 0;
+}
+.home-intro p, .about-section > p, .about-vision p, .about-founder p {
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin: 28px 0 0;
+  max-width: 58ch;
+}
+.about-content { position: relative; z-index: 2; }
+.about-hero { max-width: 760px; padding: 96px 0 110px; }
+.about-hero h1 { font-family: var(--font-display); font-size: clamp(42px, 6vw, 70px); line-height: 1.02; margin: 0 0 24px; }
+.about-hero p { color: var(--text-muted); font-size: 18px; line-height: 1.7; }
+.about-section { padding: 76px 0; border-top: 1px solid var(--line); }
+.section-label, .about-features article > span, .founder-role {
+  color: var(--coral);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.about-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; }
+.about-features article { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+.about-features h3 { font-family: var(--font-display); font-size: 18px; margin: 15px 0 8px; text-transform: capitalize; }
+.about-features p { color: var(--text-muted); font-size: 14px; line-height: 1.55; margin: 0; }
+.about-vision { margin: 30px 0 20px; padding: 70px 8%; text-align: center; border-radius: 20px; background: linear-gradient(145deg, rgba(140,107,255,.16), rgba(255,106,77,.08)); }
+.about-vision h2 { font-family: var(--font-display); font-size: clamp(32px, 5vw, 56px); line-height: 1.05; margin: 18px auto; max-width: 800px; }
+.about-vision p { margin: auto; }
+.about-founder h2 { font-family: var(--font-display); font-size: 38px; margin: 16px 0 0; }
+.about-founder .founder-role { margin: 10px 0 0; }
+.about-founder .founder-role + p { margin-top: 20px; }
+.about-download { margin: 40px 0 80px; padding: 56px 36px; text-align: center; border-radius: 18px; background: linear-gradient(110deg, rgba(140,107,255,.8), rgba(255,106,77,.65)); }
+.about-download h2 { font-family: var(--font-display); font-size: 34px; margin: 0; }
+.about-download p { color: rgba(255,255,255,.78); margin: 10px 0 24px; }
+.about-download .hero-ctas { justify-content: center; margin: 0; }
+
+@media (max-width: 700px) {
+  .nav-links a:not(.btn) { display: none; }
+  .home-intro { grid-template-columns: 1fr; gap: 8px; padding: 48px 0; }
+  .home-intro p { margin-top: 12px; }
+  .about-hero { padding: 64px 0 75px; }
+  .about-hero p { font-size: 16px; }
+  .about-section { padding: 56px 0; }
+  .about-features { grid-template-columns: 1fr; margin-top: 28px; }
+  .about-vision { padding: 48px 22px; }
+  .about-download { margin: 20px 0 55px; padding: 42px 20px; }
+  .about-download .hero-ctas { flex-direction: column; }
+}
+
 /* ---------- auth callback page ---------- */
 .callback-screen {
   position: relative;
