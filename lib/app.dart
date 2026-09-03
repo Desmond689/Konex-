@@ -10,6 +10,7 @@ import 'core/config/constants.dart';
 import 'core/deep_links/deep_link_router.dart';
 import 'core/notifications/push_notification_service.dart';
 import 'core/router/app_router.dart' show appRouterProvider, rootNavigatorKey;
+import 'core/router/routes.dart';
 import 'core/security/app_lock_controller.dart';
 import 'core/services/presence_service.dart';
 import 'core/theme/app_theme.dart';
@@ -27,6 +28,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
   StreamSubscription<Uri>? _linkSub;
   final _appLinks = AppLinks();
   final _presence = PresenceService(Supabase.instance.client);
+  Timer? _banCheckTimer;
 
   @override
   void initState() {
@@ -38,6 +40,7 @@ class _KonexAppState extends ConsumerState<KonexApp>
       _initPush();
       _initDeepLinks();
       _presence.start();
+      _startBanStatusChecks();
     });
   }
 
@@ -45,8 +48,43 @@ class _KonexAppState extends ConsumerState<KonexApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
+    _banCheckTimer?.cancel();
     _presence.stop();
     super.dispose();
+  }
+
+  void _startBanStatusChecks() {
+    _banCheckTimer?.cancel();
+    _banCheckTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _checkBanStatus(),
+    );
+    _checkBanStatus();
+  }
+
+  Future<void> _checkBanStatus() async {
+    final client = Supabase.instance.client;
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return;
+
+    try {
+      final profile = await client
+          .from('profiles')
+          .select('is_banned')
+          .eq('id', uid)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 6));
+      final banned = profile?['is_banned'] as bool? ?? false;
+      final router = ref.read(appRouterProvider);
+      final location = router.routeInformationProvider.value.uri.path;
+      if (banned && location != Routes.suspended) {
+        router.go(Routes.suspended);
+      } else if (!banned && location == Routes.suspended) {
+        router.go(Routes.home);
+      }
+    } catch (error) {
+      debugPrint('Ban status check failed: $error');
+    }
   }
 
   @override
