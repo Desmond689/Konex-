@@ -4,6 +4,15 @@ Gaming-first social for gamers (Cameroon → global).
 
 This branch is synced for GitHub Actions APK builds. The workflow is configured to build a release APK on push and to upload it as an artifact.
 
+### APK build configuration
+
+The `Build APK` workflow requires these GitHub repository secrets:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY` (the client-safe anon/public or publishable key, never a `service_role` key)
+
+Configure them in **Repository Settings → Secrets and variables → Actions**. The workflow intentionally fails when either secret is missing or still a placeholder; it must not produce an APK with invalid Supabase configuration.
+
 ## Batches summary
 
 | # | Name | Highlights |

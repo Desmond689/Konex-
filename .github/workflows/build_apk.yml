@@ -47,11 +47,28 @@ jobs:
           CI_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           CI_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          set -eu
+          if [ -z "$CI_SUPABASE_URL" ] || [ -z "$CI_SUPABASE_ANON_KEY" ]; then
+            echo "::error::Repository secrets SUPABASE_URL and SUPABASE_ANON_KEY must be configured before building the APK."
+            exit 1
+          fi
+          case "$CI_SUPABASE_URL" in
+            *placeholder*|*YOUR_*|https://example.supabase.co)
+              echo "::error::SUPABASE_URL is still a placeholder."
+              exit 1
+              ;;
+          esac
+          case "$CI_SUPABASE_ANON_KEY" in
+            *placeholder*|your_*|YOUR_*)
+              echo "::error::SUPABASE_ANON_KEY is still a placeholder."
+              exit 1
+              ;;
+          esac
           printf 'APP_ENV=development\nSUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nENABLE_LOGGING=false\nAPP_VERSION=0.1.0\nBUILD_NUMBER=%s\n' \
-            "${CI_SUPABASE_URL:-https://example.supabase.co}" \
-            "${CI_SUPABASE_ANON_KEY:-placeholder_anon_key}" \
+            "$CI_SUPABASE_URL" \
+            "$CI_SUPABASE_ANON_KEY" \
             "${{ github.run_number }}" > .env
-          echo "Using CI-safe placeholder Supabase values for the APK build."
+          echo "Supabase configuration written for the APK build."
 
       - name: Write google-services.json from secret
         run: |
