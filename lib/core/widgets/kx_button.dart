@@ -11,6 +11,8 @@ class KxButton extends StatelessWidget {
     this.loading = false,
     this.outlined = false,
     this.expanded = true,
+    this.compact = false,
+    this.icon,
   });
 
   final String label;
@@ -18,6 +20,8 @@ class KxButton extends StatelessWidget {
   final bool loading;
   final bool outlined;
   final bool expanded;
+  final bool compact;
+  final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -25,17 +29,41 @@ class KxButton extends StatelessWidget {
         ? const SizedBox(
             height: 22,
             width: 22,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            child:
+                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
           )
-        : Text(label, style: AppTextStyles.button);
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: compact ? 15 : 18),
+                const SizedBox(width: 6),
+              ],
+              Text(label, style: AppTextStyles.button),
+            ],
+          );
 
     final button = outlined
         ? OutlinedButton(
             onPressed: loading ? null : onPressed,
+            style: compact
+                ? OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 34),
+                  )
+                : null,
             child: child,
           )
         : ElevatedButton(
             onPressed: loading ? null : onPressed,
+            style: compact
+                ? ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: const Size(0, 34),
+                  )
+                : null,
             child: child,
           );
 

@@ -102,7 +102,8 @@ class SquadRemoteDataSource {
     String? logoUrl,
   }) async {
     if (await hasActiveSquad()) {
-      throw StateError('You already belong to a squad. Leave it before creating another.');
+      throw StateError(
+          'You already belong to a squad. Leave it before creating another.');
     }
 
     final slug = name
@@ -121,20 +122,24 @@ class SquadRemoteDataSource {
       communityId = game?['id'] as String?;
     }
 
-    final row = await _client.from('squads').insert({
-      'name': name.trim(),
-      'slug': '$slug-${DateTime.now().millisecondsSinceEpoch % 100000}',
-      'description': description?.trim(),
-      'rules': rules?.trim(),
-      'logo_url': logoUrl,
-      'primary_game': primaryGame,
-      'category': category,
-      'community_id': communityId,
-      'is_public': isPublic,
-      'require_approval': isPublic ? requireApproval : true,
-      'owner_id': _uid,
-      'member_count': 1,
-    }).select(_select).single();
+    final row = await _client
+        .from('squads')
+        .insert({
+          'name': name.trim(),
+          'slug': '$slug-${DateTime.now().millisecondsSinceEpoch % 100000}',
+          'description': description?.trim(),
+          'rules': rules?.trim(),
+          'logo_url': logoUrl,
+          'primary_game': primaryGame,
+          'category': category,
+          'community_id': communityId,
+          'is_public': isPublic,
+          'require_approval': isPublic ? requireApproval : true,
+          'owner_id': _uid,
+          'member_count': 1,
+        })
+        .select(_select)
+        .single();
 
     await _client.from('squad_members').insert({
       'squad_id': row['id'],
@@ -191,11 +196,13 @@ class SquadRemoteDataSource {
       if (description != null) 'description': description.trim(),
       if (rules != null) 'rules': rules.trim(),
       if (logoUrl != null) 'logo_url': logoUrl,
-      if (primaryGame != null) 'primary_game': primaryGame.isEmpty ? null : primaryGame,
+      if (primaryGame != null)
+        'primary_game': primaryGame.isEmpty ? null : primaryGame,
       if (primaryGame != null) 'community_id': communityId,
       if (category != null) 'category': category,
       if (isPublic != null) 'is_public': isPublic,
-      if (requireApproval != null) 'require_approval': isPublic == false ? true : requireApproval,
+      if (requireApproval != null)
+        'require_approval': isPublic == false ? true : requireApproval,
     };
 
     if (updates.isEmpty) {
@@ -227,11 +234,8 @@ class SquadRemoteDataSource {
       throw StateError('Only the squad owner can delete the squad');
     }
 
-    final squad = await _client
-        .from('squads')
-        .select('name')
-        .eq('id', squadId)
-        .single();
+    final squad =
+        await _client.from('squads').select('name').eq('id', squadId).single();
 
     final memberRows = await _client
         .from('squad_members')
@@ -246,10 +250,7 @@ class SquadRemoteDataSource {
       'deleted_at': DateTime.now().toIso8601String(),
     }).eq('id', squadId);
 
-    await _client
-        .from('squad_members')
-        .delete()
-        .eq('squad_id', squadId);
+    await _client.from('squad_members').delete().eq('squad_id', squadId);
 
     final squadName = squad['name'] as String? ?? 'Your squad';
     final rows = [
@@ -287,7 +288,8 @@ class SquadRemoteDataSource {
       throw StateError('Unsupported image format. Use JPG, PNG, GIF, or WebP.');
     }
 
-    final fileName = 'squad_logo_${_uid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final fileName =
+        'squad_logo_${_uid}_${DateTime.now().millisecondsSinceEpoch}.$ext';
     final bytes = await file.readAsBytes();
 
     await _client.storage.from('squad-logos').uploadBinary(
@@ -302,7 +304,8 @@ class SquadRemoteDataSource {
 
   Future<void> requestJoin(String squadId, {String? message}) async {
     if (await hasActiveSquad()) {
-      throw StateError('You already belong to a squad. Leave it before joining another.');
+      throw StateError(
+          'You already belong to a squad. Leave it before joining another.');
     }
 
     final banned = await _client
@@ -322,8 +325,8 @@ class SquadRemoteDataSource {
         .eq('id', squadId)
         .single();
 
-    final needsApproval =
-        !(squad['is_public'] as bool? ?? true) || (squad['require_approval'] as bool? ?? true);
+    final needsApproval = !(squad['is_public'] as bool? ?? true) ||
+        (squad['require_approval'] as bool? ?? true);
 
     if (!needsApproval) {
       await _client.from('squad_members').upsert({
@@ -374,7 +377,8 @@ class SquadRemoteDataSource {
     });
   }
 
-  Future<void> removeMember(String squadId, String userId, {bool ban = false}) async {
+  Future<void> removeMember(String squadId, String userId,
+      {bool ban = false}) async {
     if (ban) {
       await _client.from('squad_members').upsert({
         'squad_id': squadId,
@@ -404,11 +408,15 @@ class SquadRemoteDataSource {
       throw StateError('User already belongs to another squad');
     }
 
-    await _client.from('squad_join_requests').update({
-      'status': 'approved',
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'reviewed_by': _uid,
-    }).eq('squad_id', squadId).eq('user_id', userId);
+    await _client
+        .from('squad_join_requests')
+        .update({
+          'status': 'approved',
+          'reviewed_at': DateTime.now().toIso8601String(),
+          'reviewed_by': _uid,
+        })
+        .eq('squad_id', squadId)
+        .eq('user_id', userId);
 
     await _client.from('squad_members').upsert({
       'squad_id': squadId,
@@ -419,11 +427,15 @@ class SquadRemoteDataSource {
   }
 
   Future<void> rejectRequest(String squadId, String userId) async {
-    await _client.from('squad_join_requests').update({
-      'status': 'rejected',
-      'reviewed_at': DateTime.now().toIso8601String(),
-      'reviewed_by': _uid,
-    }).eq('squad_id', squadId).eq('user_id', userId);
+    await _client
+        .from('squad_join_requests')
+        .update({
+          'status': 'rejected',
+          'reviewed_at': DateTime.now().toIso8601String(),
+          'reviewed_by': _uid,
+        })
+        .eq('squad_id', squadId)
+        .eq('user_id', userId);
 
     await _client
         .from('squad_members')
@@ -433,14 +445,10 @@ class SquadRemoteDataSource {
   }
 
   Future<List<SquadMemberEntity>> members(String squadId) async {
-    final rows = await _client
-        .from('squad_members')
-        .select('''
+    final rows = await _client.from('squad_members').select('''
           user_id, role, status, joined_at,
-          profiles!squad_members_user_id_fkey ( username, gamer_name, avatar_url )
-        ''')
-        .eq('squad_id', squadId)
-        .order('joined_at');
+          profiles!squad_members_user_id_fkey ( username, gamer_name, avatar_url, is_verified )
+        ''').eq('squad_id', squadId).order('joined_at');
 
     return (rows as List).map((r) {
       final m = Map<String, dynamic>.from(r as Map);
@@ -450,6 +458,7 @@ class SquadRemoteDataSource {
         username: p?['username'] as String? ?? '',
         gamerName: p?['gamer_name'] as String?,
         avatarUrl: p?['avatar_url'] as String?,
+        isVerified: p?['is_verified'] == true,
         role: m['role'] as String,
         status: m['status'] as String,
         joinedAt: DateTime.parse(m['joined_at'] as String),
@@ -467,10 +476,13 @@ class SquadRemoteDataSource {
         .eq('squad_id', squadId)
         .eq('status', 'pending')
         .order('created_at');
-    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    return (rows as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
   }
 
-  Future<List<Map<String, dynamic>>> squadPosts(String squadId, {int limit = 30}) async {
+  Future<List<Map<String, dynamic>>> squadPosts(String squadId,
+      {int limit = 30}) async {
     final rows = await _client
         .from('posts')
         .select('''
@@ -482,7 +494,9 @@ class SquadRemoteDataSource {
         .order('is_announcement', ascending: false)
         .order('created_at', ascending: false)
         .limit(limit);
-    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    return (rows as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
   }
 
   Future<void> createSquadPost({

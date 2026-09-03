@@ -15,29 +15,43 @@ import '../providers/post_provider.dart';
 import '../screens/comments_sheet.dart';
 import '../../../media/presentation/video_post_player.dart';
 import '../../../../core/services/data_saver_service.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
 
 class PostCard extends ConsumerWidget {
   const PostCard({
     super.key,
     required this.post,
     this.onDeleted,
+    this.canInteract = true,
   });
   final PostEntity post;
   final void Function(String postId)? onDeleted;
+  final bool canInteract;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.read(feedControllerProvider.notifier);
 
-    return _PostCardBody(post: post, feed: feed, onDeleted: onDeleted);
+    return _PostCardBody(
+      post: post,
+      feed: feed,
+      onDeleted: onDeleted,
+      canInteract: canInteract,
+    );
   }
 }
 
 class _PostCardBody extends ConsumerStatefulWidget {
-  const _PostCardBody({required this.post, required this.feed, this.onDeleted});
+  const _PostCardBody({
+    required this.post,
+    required this.feed,
+    this.onDeleted,
+    required this.canInteract,
+  });
   final PostEntity post;
   final dynamic feed;
   final void Function(String postId)? onDeleted;
+  final bool canInteract;
 
   @override
   ConsumerState<_PostCardBody> createState() => _PostCardBodyState();
@@ -86,6 +100,7 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
   }
 
   Future<void> _toggleLike() async {
+    if (!widget.canInteract) return;
     final wasLiked = _post.likedByMe;
     final previous = _post;
     final updated = _post.copyWith(
@@ -118,6 +133,7 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
   }
 
   Future<void> _openComments() async {
+    if (!widget.canInteract) return;
     final newCount = await showCommentsSheet(
       context,
       _post.id,
@@ -181,6 +197,11 @@ class _PostCardBodyState extends ConsumerState<_PostCardBody>
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (post.authorVerified)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: KxVerifiedBadge(size: 15),
+                            ),
                           if (_roleBadgeLabel(post.authorSquadRole) != null) ...[
                             const SizedBox(width: 6),
                             _RoleBadge(label: _roleBadgeLabel(post.authorSquadRole)!),

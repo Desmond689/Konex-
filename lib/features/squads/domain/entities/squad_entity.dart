@@ -92,6 +92,7 @@ class SquadMemberEntity extends Equatable {
     required this.username,
     this.gamerName,
     this.avatarUrl,
+    this.isVerified = false,
     required this.role,
     required this.status,
     required this.joinedAt,
@@ -101,6 +102,7 @@ class SquadMemberEntity extends Equatable {
   final String username;
   final String? gamerName;
   final String? avatarUrl;
+  final bool isVerified;
   final String role;
   final String status;
   final DateTime joinedAt;

@@ -13,6 +13,7 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../social/presentation/report_dialog.dart';
 import '../../domain/entities/post_entity.dart';
 import '../providers/post_provider.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
 
 /// Opens the comments sheet and returns the post's final comment count once
 /// it closes (however it closes — send, delete, swipe-down, or tap-outside),
@@ -576,6 +577,11 @@ class _CommentTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    if (comment.authorVerified)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: KxVerifiedBadge(size: 14),
+                      ),
                     if (comment.isCreator) ...[
                       const SizedBox(width: 6),
                       const Text(

@@ -11,6 +11,7 @@ abstract class ChatRepository {
   Future<Result<List<ConversationEntity>>> listInbox();
   Future<Result<String>> getOrCreateDm(String otherUserId);
   Future<Result<String>> getOrCreateSquadChat(String squadId);
+  Future<Result<String>> getOrCreateCommunityChat(String communityId);
   Future<Result<String>> createGroupChat({required String title, required List<String> memberIds});
   Future<Result<List<Map<String, dynamic>>>> listParticipants(String conversationId);
   Future<Result<List<MessageEntity>>> getMessages(String conversationId);
@@ -22,6 +23,7 @@ abstract class ChatRepository {
   });
   Future<Result<String>> uploadChatMedia(File file);
   Future<Result<void>> pinMessage(String messageId, bool pinned);
+  Future<Result<void>> deleteMessage(String messageId);
   Future<Result<void>> setConversationPinned(String conversationId, bool pinned);
   Future<Result<void>> setConversationMuted(String conversationId, bool muted);
   Future<Result<void>> archiveConversation(String conversationId);
@@ -48,6 +50,10 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
   @override
   Future<Result<String>> getOrCreateSquadChat(String squadId) =>
       guard(() => _remote.getOrCreateSquadChat(squadId));
+
+  @override
+  Future<Result<String>> getOrCreateCommunityChat(String communityId) =>
+      guard(() => _remote.getOrCreateCommunityChat(communityId));
 
   @override
   Future<Result<String>> createGroupChat({
@@ -85,6 +91,10 @@ class ChatRepositoryImpl with BaseRepository implements ChatRepository {
   @override
   Future<Result<void>> pinMessage(String messageId, bool pinned) =>
       guard(() => _remote.pinMessage(messageId, pinned));
+
+  @override
+  Future<Result<void>> deleteMessage(String messageId) =>
+      guard(() => _remote.deleteMessage(messageId));
 
   @override
   Future<Result<void>> setConversationPinned(String conversationId, bool pinned) =>

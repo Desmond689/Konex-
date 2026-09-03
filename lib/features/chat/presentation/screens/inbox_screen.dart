@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_empty_state.dart';
 import '../../../../core/widgets/kx_error_view.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
 import '../../domain/entities/chat_entity.dart';
 import '../providers/chat_provider.dart';
 import '../../../../core/errors/error_handler.dart';
@@ -141,6 +142,11 @@ class _InboxScreenState extends ConsumerState<InboxScreen> {
             const Padding(
               padding: EdgeInsets.only(left: 4),
               child: Icon(Icons.volume_off, size: 14),
+            ),
+          if (c.isVerified)
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: KxVerifiedBadge(size: 15),
             ),
         ],
       ),

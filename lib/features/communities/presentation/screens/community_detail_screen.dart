@@ -14,6 +14,7 @@ import '../../../admin/presentation/screens/admin_edit_game_screen.dart';
 import '../../../posts/presentation/providers/post_provider.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
 import '../../../posts/presentation/widgets/composer_sheet.dart';
+import '../../../chat/presentation/providers/chat_provider.dart';
 import '../providers/community_provider.dart';
 import '../../domain/community_entity.dart';
 import '../../../../core/errors/error_handler.dart';
@@ -49,7 +50,8 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         );
       },
       failure: (e, _) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       },
     );
   }
@@ -61,8 +63,12 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         title: const Text('Leave community?'),
         content: Text('Leave ${c.name}? You can rejoin later.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Leave')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Leave')),
         ],
       ),
     );
@@ -75,8 +81,27 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
         ref.invalidate(myCommunitiesProvider);
       },
       failure: (e, _) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       },
+    );
+  }
+
+  Future<void> _openChat(CommunityEntity c) async {
+    if (!c.isMember) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Join the community to use chat')),
+      );
+      return;
+    }
+    final r =
+        await ref.read(chatRepositoryProvider).getOrCreateCommunityChat(c.id);
+    if (!mounted) return;
+    r.when(
+      success: (id) => context.push('/chat/$id'),
+      failure: (e, _) => ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      ),
     );
   }
 
@@ -96,11 +121,15 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
     final isStaff = ref.watch(isStaffProvider).valueOrNull ?? false;
 
     return async.when(
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(appBar: AppBar(), body: KxErrorView(message: ErrorHandler.userMessage(e))),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (e, _) => Scaffold(
+          appBar: AppBar(),
+          body: KxErrorView(message: ErrorHandler.userMessage(e))),
       data: (c) {
         if (c == null) {
-          return Scaffold(appBar: AppBar(), body: const Center(child: Text('Not found')));
+          return Scaffold(
+              appBar: AppBar(), body: const Center(child: Text('Not found')));
         }
 
         _tabs ??= TabController(length: 5, vsync: this);
@@ -128,8 +157,15 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                         if (v == 'leave') _leave(c);
                       },
                       itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'leave', child: Text('Leave community')),
+                        PopupMenuItem(
+                            value: 'leave', child: Text('Leave community')),
                       ],
+                    ),
+                  if (c.isMember)
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      tooltip: 'Community chat',
+                      onPressed: () => _openChat(c),
                     ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
@@ -142,12 +178,16 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                       children: [
                         CircleAvatar(
                           radius: 36,
-                          backgroundColor: AppColors.primary.withValues(alpha: 0.25),
-                          backgroundImage:
-                              c.avatarUrl != null ? NetworkImage(c.avatarUrl!) : null,
+                          backgroundColor:
+                              AppColors.primary.withValues(alpha: 0.25),
+                          backgroundImage: c.avatarUrl != null
+                              ? NetworkImage(c.avatarUrl!)
+                              : null,
                           child: c.avatarUrl == null
                               ? Text(
-                                  c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
+                                  c.name.isNotEmpty
+                                      ? c.name[0].toUpperCase()
+                                      : '?',
                                   style: AppTextStyles.headline,
                                 )
                               : null,
@@ -174,13 +214,16 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 40),
                             child: KxButton(
-                              label: c.isPrivate ? 'Request to join' : 'Join community',
+                              label: c.isPrivate
+                                  ? 'Request to join'
+                                  : 'Join community',
                               onPressed: () => _join(c),
                             ),
                           )
                         else if (c.isMember)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 6),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: AppColors.border),
@@ -188,7 +231,8 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.check, size: 14, color: AppColors.textSecondary),
+                                Icon(Icons.check,
+                                    size: 14, color: AppColors.textSecondary),
                                 const SizedBox(width: 4),
                                 Text('Joined', style: AppTextStyles.caption),
                               ],
@@ -219,7 +263,11 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
                   community: c,
                   onSeeAllPosts: () => _tabs?.animateTo(1),
                 ),
-                _FeedTab(communityId: c.id, member: c.isMember, canAnnounce: c.isModerator, community: c),
+                _FeedTab(
+                    communityId: c.id,
+                    member: c.isMember,
+                    canAnnounce: c.isModerator,
+                    community: c),
                 _LfgPlaceholder(gameName: c.gameName, member: c.isMember),
                 _SquadsTab(communityId: c.id),
                 _AboutTab(c: c),
@@ -233,7 +281,10 @@ class _CommunityDetailScreenState extends ConsumerState<CommunityDetailScreen>
 }
 
 class _HomeTab extends ConsumerWidget {
-  const _HomeTab({required this.communityId, required this.community, required this.onSeeAllPosts});
+  const _HomeTab(
+      {required this.communityId,
+      required this.community,
+      required this.onSeeAllPosts});
   final String communityId;
   final CommunityEntity community;
   final VoidCallback onSeeAllPosts;
@@ -245,7 +296,8 @@ class _HomeTab extends ConsumerWidget {
       destinationId: communityId,
       destinationName: community.name,
       destinationAvatarUrl: community.avatarUrl,
-      destinationSubtitle: '${community.memberCount} members · ${community.isOfficial ? 'Official' : 'Community'}',
+      destinationSubtitle:
+          '${community.memberCount} members · ${community.isOfficial ? 'Official' : 'Community'}',
     );
     if (created == true) ref.invalidate(communityPostFeedProvider(communityId));
   }
@@ -264,7 +316,8 @@ class _HomeTab extends ConsumerWidget {
             : null;
 
         return RefreshIndicator(
-          onRefresh: () async => ref.invalidate(communityPostFeedProvider(communityId)),
+          onRefresh: () async =>
+              ref.invalidate(communityPostFeedProvider(communityId)),
           color: AppColors.primary,
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -273,7 +326,10 @@ class _HomeTab extends ConsumerWidget {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [AppColors.primary.withValues(alpha: 0.3), AppColors.surfaceElevated],
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.3),
+                      AppColors.surfaceElevated
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.border),
@@ -287,11 +343,14 @@ class _HomeTab extends ConsumerWidget {
                         color: AppColors.primary.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(10),
                         image: c.avatarUrl != null
-                            ? DecorationImage(image: NetworkImage(c.avatarUrl!), fit: BoxFit.cover)
+                            ? DecorationImage(
+                                image: NetworkImage(c.avatarUrl!),
+                                fit: BoxFit.cover)
                             : null,
                       ),
                       child: c.avatarUrl == null
-                          ? const Icon(Icons.sports_esports, color: Colors.white)
+                          ? const Icon(Icons.sports_esports,
+                              color: Colors.white)
                           : null,
                     ),
                     const SizedBox(width: 12),
@@ -300,8 +359,11 @@ class _HomeTab extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            c.isOfficial ? 'Official ${c.gameName} community on KONEX' : c.name,
-                            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700, fontSize: 13),
+                            c.isOfficial
+                                ? 'Official ${c.gameName} community on KONEX'
+                                : c.name,
+                            style: AppTextStyles.body.copyWith(
+                                fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                           Text(
                             'The place for players to team up, share tips, and stay updated!',
@@ -318,8 +380,10 @@ class _HomeTab extends ConsumerWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Highlights', style: AppTextStyles.title.copyWith(fontSize: 15)),
-                    TextButton(onPressed: onSeeAllPosts, child: const Text('See all')),
+                    Text('Highlights',
+                        style: AppTextStyles.title.copyWith(fontSize: 15)),
+                    TextButton(
+                        onPressed: onSeeAllPosts, child: const Text('See all')),
                   ],
                 ),
                 Container(
@@ -339,16 +403,20 @@ class _HomeTab extends ConsumerWidget {
                           color: AppColors.primary.withValues(alpha: 0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.campaign_outlined, color: AppColors.primary, size: 20),
+                        child: const Icon(Icons.campaign_outlined,
+                            color: AppColors.primary, size: 20),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(highlight.body ?? '', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600, fontSize: 13)),
+                            Text(highlight.body ?? '',
+                                style: AppTextStyles.body.copyWith(
+                                    fontWeight: FontWeight.w600, fontSize: 13)),
                             const SizedBox(height: 2),
-                            Text(_relativeTimeCommunity(highlight.createdAt), style: AppTextStyles.caption),
+                            Text(_relativeTimeCommunity(highlight.createdAt),
+                                style: AppTextStyles.caption),
                           ],
                         ),
                       ),
@@ -360,8 +428,10 @@ class _HomeTab extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Latest Posts', style: AppTextStyles.title.copyWith(fontSize: 15)),
-                  TextButton(onPressed: onSeeAllPosts, child: const Text('See all')),
+                  Text('Latest Posts',
+                      style: AppTextStyles.title.copyWith(fontSize: 15)),
+                  TextButton(
+                      onPressed: onSeeAllPosts, child: const Text('See all')),
                 ],
               ),
               if (posts.isEmpty)
@@ -370,9 +440,18 @@ class _HomeTab extends ConsumerWidget {
                   child: Text('No posts yet', style: AppTextStyles.caption),
                 )
               else
-                ...posts.take(2).map((p) => PostCard(key: ValueKey(p.id), post: p)),
+                ...posts
+                    .take(2)
+                    .map((p) => PostCard(
+                          key: ValueKey(p.id),
+                          post: p,
+                          canInteract: c.isMember,
+                        )),
               const SizedBox(height: 8),
-              KxButton(label: 'Create Post', onPressed: () => _createPost(context, ref)),
+              if (c.isMember)
+                KxButton(
+                    label: 'Create Post',
+                    onPressed: () => _createPost(context, ref)),
               const SizedBox(height: 24),
             ],
           ),
@@ -416,9 +495,11 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
       destinationId: widget.communityId,
       destinationName: widget.community.name,
       destinationAvatarUrl: widget.community.avatarUrl,
-      destinationSubtitle: '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
+      destinationSubtitle:
+          '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
     );
-    if (created == true) ref.invalidate(communityPostFeedProvider(widget.communityId));
+    if (created == true)
+      ref.invalidate(communityPostFeedProvider(widget.communityId));
   }
 
   Future<void> _createAnnouncement() async {
@@ -428,9 +509,11 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
       destinationId: widget.communityId,
       destinationName: widget.community.name,
       destinationAvatarUrl: widget.community.avatarUrl,
-      destinationSubtitle: '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
+      destinationSubtitle:
+          '${widget.community.memberCount} members · ${widget.community.isOfficial ? 'Official' : 'Community'}',
     );
-    if (created == true) ref.invalidate(communityPostFeedProvider(widget.communityId));
+    if (created == true)
+      ref.invalidate(communityPostFeedProvider(widget.communityId));
   }
 
   @override
@@ -490,16 +573,24 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => KxErrorView(message: ErrorHandler.userMessage(e)),
             data: (posts) {
-              final filtered = _filter == 'all' ? posts : posts.where((p) => p.postType == _filter).toList();
+              final filtered = _filter == 'all'
+                  ? posts
+                  : posts.where((p) => p.postType == _filter).toList();
               if (filtered.isEmpty) {
-                return Center(child: Text('No posts yet', style: AppTextStyles.caption));
+                return Center(
+                    child: Text('No posts yet', style: AppTextStyles.caption));
               }
               return RefreshIndicator(
-                onRefresh: () async => ref.invalidate(communityPostFeedProvider(widget.communityId)),
+                onRefresh: () async => ref
+                    .invalidate(communityPostFeedProvider(widget.communityId)),
                 color: AppColors.primary,
                 child: ListView.builder(
                   itemCount: filtered.length,
-                  itemBuilder: (_, i) => PostCard(key: ValueKey(filtered[i].id), post: filtered[i]),
+                  itemBuilder: (_, i) => PostCard(
+                      key: ValueKey(filtered[i].id),
+                      post: filtered[i],
+                      canInteract: widget.member,
+                    ),
                 ),
               );
             },
@@ -580,8 +671,9 @@ class _SquadsTabState extends ConsumerState<_SquadsTab> {
       _loading = true;
       _error = null;
     });
-    final result =
-        await ref.read(communityRepositoryProvider).squadsForGame(widget.communityId);
+    final result = await ref
+        .read(communityRepositoryProvider)
+        .squadsForGame(widget.communityId);
     if (!mounted) return;
     result.when(
       success: (squads) {
@@ -668,7 +760,8 @@ class _AboutTab extends StatelessWidget {
         ],
         Text('Game: ${c.gameName}'),
         if (c.category != null) Text('Category: ${c.category}'),
-        if (c.platforms.isNotEmpty) Text('Platforms: ${c.platforms.join(", ")}'),
+        if (c.platforms.isNotEmpty)
+          Text('Platforms: ${c.platforms.join(", ")}'),
         if (c.primaryRegion != null) Text('Region: ${c.primaryRegion}'),
         Text(c.isOfficial ? 'Official KONEX game community' : 'Community'),
         const SizedBox(height: 12),

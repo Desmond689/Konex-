@@ -1,4 +1,5 @@
 import '../../../calls/presentation/providers/call_controller.dart';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,18 +30,6 @@ import '../../../stories/presentation/screens/create_story_screen.dart';
 import '../../../stories/presentation/screens/story_viewer_screen.dart';
 import '../../../stories/domain/entities/story_entity.dart';
 import '../../../../core/errors/error_handler.dart';
-
-/// Formats a count as a compact string for the Reputation/Posts pills,
-/// e.g. 39400 -> "39.4K", 900 -> "900".
-String _formatCompact(int n) {
-  if (n < 1000) return '$n';
-  if (n < 1000000) {
-    final k = n / 1000;
-    return '${k.toStringAsFixed(k < 10 ? 1 : 0)}K';
-  }
-  final m = n / 1000000;
-  return '${m.toStringAsFixed(m < 10 ? 1 : 0)}M';
-}
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.userId});
@@ -86,13 +75,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       return const Scaffold(body: Center(child: Text('Not signed in')));
     }
     final isMe = id == me;
-    final asyncProfile =
-        isMe ? ref.watch(myProfileProvider) : ref.watch(profileByIdProvider(id));
+    final asyncProfile = isMe
+        ? ref.watch(myProfileProvider)
+        : ref.watch(profileByIdProvider(id));
 
     return asyncProfile.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(
         appBar: AppBar(),
         body: KxErrorView(message: ErrorHandler.userMessage(e)),
@@ -104,7 +93,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             body: const Center(child: Text('Profile not found')),
           );
         }
-
 
         if (!isMe && profile.isPrivate && !profile.isFollowing) {
           return Scaffold(
@@ -119,12 +107,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         ? NetworkImage(profile.avatarUrl!)
                         : null,
                     child: profile.avatarUrl == null
-                        ? Text(profile.displayName.isNotEmpty ? profile.displayName[0] : '?')
+                        ? Text(
+                            profile.displayName.isNotEmpty
+                                ? profile.displayName[0]
+                                : '?',
+                          )
                         : null,
                   ),
                   const SizedBox(height: 12),
                   Text(profile.displayName, style: AppTextStyles.headline),
-                  Text('@${profile.username}', style: AppTextStyles.bodySecondary),
+                  Text(
+                    '@${profile.username}',
+                    style: AppTextStyles.bodySecondary,
+                  ),
                   const SizedBox(height: 16),
                   const Text('This account is private.'),
                   const SizedBox(height: 16),
@@ -150,69 +145,85 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         _tabs ??= TabController(length: 4, vsync: this);
         // Load posts once when profile arrives
         if (_postsLoading && _posts.isEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) => _loadPosts(profile.id));
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _loadPosts(profile.id),
+          );
         }
 
         return Scaffold(
           body: NestedScrollView(
             headerSliverBuilder: (context, inner) => [
               SliverAppBar(
-                expandedHeight: 230,
+                expandedHeight: 220,
                 pinned: true,
                 clipBehavior: Clip.none,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => context.pop(),
-                ),
+                leading: isMe
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.arrow_back),
+                        onPressed: () => context.pop(),
+                      ),
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.share_outlined),
-                    onPressed: () => ShareService.shareProfile(context, profile.username),
+                    onPressed: () =>
+                        ShareService.shareProfile(context, profile.username),
                   ),
-                  if (isMe)
-                    IconButton(
-                      icon: const Icon(Icons.settings_outlined),
-                      onPressed: () => context.push(Routes.settings),
-                    )
-                  else
-                    PopupMenuButton<String>(
-                      onSelected: (v) async {
-                        if (v == 'report') {
-                          await showReportDialog(
-                            context,
-                            targetType: 'profile',
-                            targetId: profile.id,
+                  PopupMenuButton<String>(
+                    onSelected: (v) async {
+                      if (v == 'settings') {
+                        context.push(Routes.settings);
+                        return;
+                      }
+                      if (v == 'report') {
+                        await showReportDialog(
+                          context,
+                          targetType: 'profile',
+                          targetId: profile.id,
+                        );
+                      }
+                      if (v == 'block') {
+                        final social = ref.read(socialRepositoryProvider);
+                        if (profile.isBlocked) {
+                          await social.unblock(profile.id);
+                        } else {
+                          await social.block(profile.id);
+                        }
+                        ref.invalidate(profileByIdProvider(profile.id));
+                      }
+                      if (v == 'copy') {
+                        await Clipboard.setData(
+                          ClipboardData(text: '@${profile.username}'),
+                        );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Username copied')),
                           );
                         }
-                        if (v == 'block') {
-                          final social = ref.read(socialRepositoryProvider);
-                          if (profile.isBlocked) {
-                            await social.unblock(profile.id);
-                          } else {
-                            await social.block(profile.id);
-                          }
-                          ref.invalidate(profileByIdProvider(profile.id));
-                        }
-                        if (v == 'copy') {
-                          await Clipboard.setData(
-                            ClipboardData(text: '@${profile.username}'),
-                          );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Username copied')),
-                            );
-                          }
-                        }
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(value: 'copy', child: Text('Copy username')),
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      if (isMe)
+                        const PopupMenuItem(
+                          value: 'settings',
+                          child: Text('Settings'),
+                        ),
+                      if (!isMe) ...[
+                        const PopupMenuItem(
+                          value: 'copy',
+                          child: Text('Copy username'),
+                        ),
                         PopupMenuItem(
                           value: 'block',
                           child: Text(profile.isBlocked ? 'Unblock' : 'Block'),
                         ),
-                        const PopupMenuItem(value: 'report', child: Text('Report')),
+                        const PopupMenuItem(
+                          value: 'report',
+                          child: Text('Report'),
+                        ),
                       ],
-                    ),
+                    ],
+                  ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
@@ -235,27 +246,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                               AppColors.background.withValues(alpha: 0.85),
                             ],
                           ),
-                        ),
-                      ),
-                      // Stat pills, stacked top-right: Reputation above Posts.
-                      Positioned(
-                        top: 12,
-                        right: 12,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _BannerBadge(
-                              icon: Icons.local_fire_department,
-                              label: 'Reputation',
-                              value: _formatCompact(profile.reputation ?? 0),
-                            ),
-                            const SizedBox(height: 8),
-                            _BannerBadge(
-                              icon: Icons.forum_outlined,
-                              label: 'Posts',
-                              value: _postsLoading ? '…' : '${_posts.length}',
-                            ),
-                          ],
                         ),
                       ),
                       // Avatar + name/username/role, left-aligned, overlapping
@@ -293,15 +283,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                                 width: 220,
                                                 height: 220,
                                                 decoration: const BoxDecoration(
-                                                  color: AppColors.surfaceElevated,
+                                                  color:
+                                                      AppColors.surfaceElevated,
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: Center(
                                                   child: Text(
-                                                    profile.displayName.isNotEmpty
-                                                        ? profile.displayName[0].toUpperCase()
+                                                    profile.displayName
+                                                            .isNotEmpty
+                                                        ? profile.displayName[0]
+                                                            .toUpperCase()
                                                         : '?',
-                                                    style: AppTextStyles.headline.copyWith(fontSize: 52),
+                                                    style: AppTextStyles
+                                                        .headline
+                                                        .copyWith(fontSize: 52),
                                                   ),
                                                 ),
                                               ),
@@ -317,12 +312,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                     radius: 46,
                                     backgroundColor: AppColors.surfaceElevated,
                                     backgroundImage: profile.avatarUrl != null
-                                        ? CachedNetworkImageProvider(profile.avatarUrl!)
+                                        ? CachedNetworkImageProvider(
+                                            profile.avatarUrl!,
+                                          )
                                         : null,
                                     child: profile.avatarUrl == null
                                         ? Text(
                                             profile.displayName.isNotEmpty
-                                                ? profile.displayName[0].toUpperCase()
+                                                ? profile.displayName[0]
+                                                    .toUpperCase()
                                                 : '?',
                                             style: AppTextStyles.headline,
                                           )
@@ -338,7 +336,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                             decoration: BoxDecoration(
                                               color: const Color(0xFF22C55E),
                                               shape: BoxShape.circle,
-                                              border: Border.all(color: AppColors.background, width: 2),
+                                              border: Border.all(
+                                                color: AppColors.background,
+                                                width: 2,
+                                              ),
                                             ),
                                           )
                                         : const SizedBox.shrink(),
@@ -365,13 +366,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                         ),
                                         if (profile.isVerified) ...[
                                           const SizedBox(width: 4),
-                                          const Icon(Icons.verified, color: Colors.lightBlueAccent, size: 18),
+                                          const Icon(
+                                            Icons.verified,
+                                            color: Colors.lightBlueAccent,
+                                            size: 18,
+                                          ),
                                         ],
                                       ],
                                     ),
-                                    Text('@${profile.username}', style: AppTextStyles.bodySecondary),
+                                    if (profile.badges.isNotEmpty)
+                                      Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.16),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          '🔥 ${profile.badges.first}',
+                                          style: AppTextStyles.caption.copyWith(
+                                            color: AppColors.textPrimary,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    Text(
+                                      '@${profile.username}',
+                                      style: AppTextStyles.bodySecondary,
+                                    ),
                                     if (profile.playerType != null)
-                                      Text('🎮 ${profile.playerType}', style: AppTextStyles.caption),
+                                      Text(
+                                        '🎮 ${profile.playerType}',
+                                        style: AppTextStyles.caption,
+                                      ),
                                   ],
                                 ),
                               ),
@@ -383,11 +416,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   ),
                 ),
               ),
-              SliverToBoxAdapter(child: _Header(profile: profile, isMe: isMe)),
+              SliverToBoxAdapter(
+                child: _Header(
+                  profile: profile,
+                  isMe: isMe,
+                  postCount: _posts.length,
+                ),
+              ),
               SliverToBoxAdapter(
                 child: _ProfileStoriesSection(userId: profile.id, isMe: isMe),
               ),
-              if (profile.games.isNotEmpty && profile.showGames(isMe, profile.isFollowing))
+              if ((isMe || profile.games.isNotEmpty) &&
+                  profile.showGames(isMe, profile.isFollowing))
                 ProfileGamesSliver(profile: profile, isMe: isMe),
               SliverPersistentHeader(
                 pinned: true,
@@ -407,7 +447,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             body: TabBarView(
               controller: _tabs,
               children: [
-                _PostsTab(posts: _posts, loading: _postsLoading, onRefresh: () => _loadPosts(profile.id)),
+                _PostsTab(
+                  posts: _posts,
+                  loading: _postsLoading,
+                  onRefresh: () => _loadPosts(profile.id),
+                ),
                 _MediaTab(posts: _posts),
                 _SquadsTab(profile: profile),
                 _AboutTab(profile: profile),
@@ -421,7 +465,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 }
 
 class ProfileGamesSliver extends StatelessWidget {
-  const ProfileGamesSliver({super.key, required this.profile, required this.isMe});
+  const ProfileGamesSliver({
+    super.key,
+    required this.profile,
+    required this.isMe,
+  });
   final ProfileEntity profile;
   final bool isMe;
 
@@ -434,9 +482,14 @@ class ProfileGamesSliver extends StatelessWidget {
 }
 
 class _Header extends ConsumerWidget {
-  const _Header({required this.profile, required this.isMe});
+  const _Header({
+    required this.profile,
+    required this.isMe,
+    required this.postCount,
+  });
   final ProfileEntity profile;
   final bool isMe;
+  final int postCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -462,10 +515,12 @@ class _Header extends ConsumerWidget {
                 Wrap(
                   spacing: 6,
                   children: profile.badges
-                      .map((b) => Chip(
-                            label: Text(b, style: AppTextStyles.caption),
-                            visualDensity: VisualDensity.compact,
-                          ))
+                      .map(
+                        (b) => Chip(
+                          label: Text(b, style: AppTextStyles.caption),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )
                       .toList(),
                 ),
                 const SizedBox(height: 6),
@@ -488,9 +543,13 @@ class _Header extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      child: _Stat(label: 'Followers', value: profile.followerCount),
+                      child: _Stat(
+                        label: 'Followers',
+                        value: profile.followerCount,
+                      ),
                     ),
-                    const SizedBox(width: 28),
+                    _statDivider(),
+                    const SizedBox(width: 16),
                     InkWell(
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
@@ -500,8 +559,14 @@ class _Header extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      child: _Stat(label: 'Following', value: profile.followingCount),
+                      child: _Stat(
+                        label: 'Following',
+                        value: profile.followingCount,
+                      ),
                     ),
+                    _statDivider(),
+                    const SizedBox(width: 16),
+                    _Stat(label: 'Posts', value: postCount),
                   ],
                 ),
               ),
@@ -512,6 +577,8 @@ class _Header extends ConsumerWidget {
                     Expanded(
                       child: KxButton(
                         label: 'Edit Profile',
+                        icon: Icons.edit_outlined,
+                        compact: true,
                         onPressed: () => context.push(Routes.editProfile),
                       ),
                     ),
@@ -519,8 +586,13 @@ class _Header extends ConsumerWidget {
                     Expanded(
                       child: KxButton(
                         label: 'Share Profile',
+                        icon: Icons.share_outlined,
+                        compact: true,
                         outlined: true,
-                        onPressed: () => ShareService.shareProfile(context, profile.username),
+                        onPressed: () => ShareService.shareProfile(
+                          context,
+                          profile.username,
+                        ),
                       ),
                     ),
                   ],
@@ -531,10 +603,14 @@ class _Header extends ConsumerWidget {
                     Expanded(
                       child: KxButton(
                         label: profile.isFollowing ? 'Following' : 'Follow',
+                        icon: Icons.person_add_alt_1_outlined,
+                        compact: true,
                         onPressed: !profile.canFollow(false)
                             ? null
                             : () async {
-                                final social = ref.read(socialRepositoryProvider);
+                                final social = ref.read(
+                                  socialRepositoryProvider,
+                                );
                                 if (profile.isFollowing) {
                                   await social.unfollow(profile.id);
                                 } else {
@@ -572,8 +648,11 @@ class _Header extends ConsumerWidget {
                     Expanded(
                       child: KxButton(
                         label: 'Message',
+                        icon: Icons.chat_bubble_outline,
+                        compact: true,
                         outlined: true,
-                        onPressed: !profile.canMessage(false, profile.isFollowing)
+                        onPressed: !profile.canMessage(
+                                false, profile.isFollowing)
                             ? null
                             : () async {
                                 final r = await ref
@@ -598,6 +677,12 @@ class _Header extends ConsumerWidget {
       ),
     );
   }
+
+  Widget _statDivider() => Container(
+        height: 30,
+        width: 1,
+        color: AppColors.border,
+      );
 }
 
 class _SquadTag extends StatelessWidget {
@@ -647,25 +732,39 @@ class _SquadTag extends StatelessWidget {
                         if (profile.squadRole != null) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.primary.withValues(alpha: 0.18),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              profile.squadRole![0].toUpperCase() + profile.squadRole!.substring(1),
-                              style: AppTextStyles.caption.copyWith(fontSize: 10, color: AppColors.primary),
+                              profile.squadRole![0].toUpperCase() +
+                                  profile.squadRole!.substring(1),
+                              style: AppTextStyles.caption.copyWith(
+                                fontSize: 10,
+                                color: AppColors.primary,
+                              ),
                             ),
                           ),
                         ],
                       ],
                     ),
                     if (profile.squadMemberCount != null)
-                      Text('${profile.squadMemberCount} members', style: AppTextStyles.caption),
+                      Text(
+                        '${profile.squadMemberCount} members',
+                        style: AppTextStyles.caption,
+                      ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+              const Icon(
+                Icons.chevron_right,
+                color: AppColors.textMuted,
+                size: 20,
+              ),
             ],
           ),
         ),
@@ -691,11 +790,16 @@ class _GamesSection extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('My Games', style: AppTextStyles.title.copyWith(fontSize: 15)),
+              Text(
+                'My Games',
+                style: AppTextStyles.title.copyWith(fontSize: 15),
+              ),
               if (isMe)
                 TextButton(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ManageGamesScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const ManageGamesScreen(),
+                    ),
                   ),
                   child: const Text('Manage'),
                 ),
@@ -724,7 +828,9 @@ class _GamesSection extends StatelessWidget {
                   name: 'Add Game',
                   isAdd: true,
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ManageGamesScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const ManageGamesScreen(),
+                    ),
                   ),
                 ),
             ],
@@ -778,7 +884,9 @@ class _GameTile extends StatelessWidget {
                 ),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
-                  style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+                  style: AppTextStyles.caption.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             const SizedBox(height: 6),
@@ -787,7 +895,10 @@ class _GameTile extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption.copyWith(fontSize: 10.5, color: AppColors.textPrimary),
+              style: AppTextStyles.caption.copyWith(
+                fontSize: 10.5,
+                color: AppColors.textPrimary,
+              ),
             ),
             if (!isAdd) ...[
               const SizedBox(height: 3),
@@ -808,35 +919,6 @@ class _GameTile extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _BannerBadge extends StatelessWidget {
-  const _BannerBadge({required this.icon, required this.label, required this.value});
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceElevated.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: AppColors.primary),
-          const SizedBox(width: 6),
-          Text(value, style: AppTextStyles.body.copyWith(fontSize: 13, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 4),
-          Text(label, style: AppTextStyles.caption.copyWith(fontSize: 11)),
-        ],
       ),
     );
   }
@@ -1030,12 +1112,17 @@ class _ProfileStoriesSection extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Text('Stories', style: AppTextStyles.title.copyWith(fontSize: 15)),
+                  Text(
+                    'Stories',
+                    style: AppTextStyles.title.copyWith(fontSize: 15),
+                  ),
                   const Spacer(),
                   if (stories.isNotEmpty)
                     Text(
                       'Watch All',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.primary),
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.primary,
+                      ),
                     ),
                 ],
               ),
@@ -1049,7 +1136,9 @@ class _ProfileStoriesSection extends ConsumerWidget {
                       GestureDetector(
                         onTap: () async {
                           final ok = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(builder: (_) => const CreateStoryScreen()),
+                            MaterialPageRoute(
+                              builder: (_) => const CreateStoryScreen(),
+                            ),
                           );
                           if (ok == true) {
                             ref.invalidate(userStoriesProvider(userId));
@@ -1085,7 +1174,8 @@ class _ProfileStoriesSection extends ConsumerWidget {
                           },
                           child: _storyTile(
                             label: s.timeAgo,
-                            imageUrl: s.mediaType == 'photo' ? s.mediaUrl : null,
+                            imageUrl:
+                                s.mediaType == 'photo' ? s.mediaUrl : null,
                             isText: s.mediaType == 'text',
                             bg: s.backgroundColor,
                           ),
@@ -1123,16 +1213,26 @@ class _ProfileStoriesSection extends ConsumerWidget {
                   ? AppColors.surfaceElevated
                   : (isText ? safeHexColor(bg) : AppColors.surfaceElevated),
               border: isCreate
-                  ? Border.all(color: AppColors.primary.withValues(alpha: 0.5), width: 1.5)
+                  ? Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.5),
+                      width: 1.5,
+                    )
                   : null,
               image: imageUrl != null
-                  ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover)
+                  ? DecorationImage(
+                      image: NetworkImage(imageUrl),
+                      fit: BoxFit.cover,
+                    )
                   : null,
             ),
             child: isCreate
                 ? Icon(icon, color: AppColors.primary, size: 28)
                 : (isText
-                    ? const Icon(Icons.text_fields, color: Colors.white54, size: 22)
+                    ? const Icon(
+                        Icons.text_fields,
+                        color: Colors.white54,
+                        size: 22,
+                      )
                     : null),
           ),
           const SizedBox(height: 4),

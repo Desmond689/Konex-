@@ -5,11 +5,13 @@ class ConversationEntity extends Equatable {
     required this.id,
     required this.type,
     this.squadId,
+    this.communityId,
     this.title,
     this.avatarUrl,
     this.lastMessage,
     this.lastMessageAt,
     this.otherUserId,
+    this.isVerified = false,
     this.unread = false,
     this.unreadCount = 0,
     this.pinned = false,
@@ -19,13 +21,15 @@ class ConversationEntity extends Equatable {
   });
 
   final String id;
-  final String type; // dm | squad
+  final String type; // dm | squad | community
   final String? squadId;
+  final String? communityId;
   final String? title;
   final String? avatarUrl;
   final String? lastMessage;
   final DateTime? lastMessageAt;
   final String? otherUserId;
+  final bool isVerified;
   final bool unread;
   final int unreadCount;
   final bool pinned;
@@ -34,7 +38,8 @@ class ConversationEntity extends Equatable {
   final bool isRequest;
 
   @override
-  List<Object?> get props => [id, lastMessage, lastMessageAt, unreadCount, pinned];
+  List<Object?> get props =>
+      [id, lastMessage, lastMessageAt, unreadCount, pinned];
 }
 
 class MessageEntity extends Equatable {
@@ -44,6 +49,7 @@ class MessageEntity extends Equatable {
     required this.senderId,
     required this.senderName,
     this.senderAvatar,
+    this.senderVerified = false,
     required this.body,
     required this.createdAt,
     this.isMine = false,
@@ -63,6 +69,7 @@ class MessageEntity extends Equatable {
   final String senderId;
   final String senderName;
   final String? senderAvatar;
+  final bool senderVerified;
   final String body;
   final DateTime createdAt;
   final bool isMine;

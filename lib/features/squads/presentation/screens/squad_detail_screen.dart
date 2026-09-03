@@ -11,6 +11,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/kx_button.dart';
 import '../../../../core/widgets/kx_error_view.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
 import '../../../chat/presentation/providers/chat_provider.dart';
 import '../../../posts/presentation/providers/post_provider.dart';
 import '../../../posts/presentation/widgets/post_card.dart';
@@ -821,7 +822,16 @@ class _MembersTab extends ConsumerWidget {
                       ? Text(m.displayName.isNotEmpty ? m.displayName[0] : '?')
                       : null,
                 ),
-                title: Text('$roleIcon ${m.displayName}'),
+                title: Row(
+                  children: [
+                    Flexible(child: Text('$roleIcon ${m.displayName}')),
+                    if (m.isVerified)
+                      const Padding(
+                        padding: EdgeInsets.only(left: 4),
+                        child: KxVerifiedBadge(size: 15),
+                      ),
+                  ],
+                ),
                 subtitle: Text('@${m.username} · ${m.role}'),
                 onTap: () => context.push('/user/${m.userId}'),
                 onLongPress: squad.isModerator && m.role != 'owner'

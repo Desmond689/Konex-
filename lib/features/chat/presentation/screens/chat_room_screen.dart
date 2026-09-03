@@ -6,10 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/config/dependency_injection.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/kx_verified_badge.dart';
 import '../../domain/entities/chat_entity.dart';
 import '../providers/chat_provider.dart';
 import '../../../calls/presentation/providers/call_controller.dart';
@@ -38,9 +40,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   // participant's real profile, never a placeholder name.
   String? _otherUserId;
   String? _otherAvatarUrl;
+  bool _isCommunityChat = false;
   DateTime? _otherLastSeen;
   Timer? _presencePoll;
-
 
   static const _emojis = ['👍', '❤️', '🔥', '😂', '😮', '🎮'];
 
@@ -51,7 +53,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
   }
 
   Future<void> _load() async {
-    final r = await ref.read(chatRepositoryProvider).getMessages(widget.conversationId);
+    final r = await ref
+        .read(chatRepositoryProvider)
+        .getMessages(widget.conversationId);
     if (!mounted) return;
     setState(() {
       _messages = r.valueOrNull ?? [];
@@ -66,7 +70,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       },
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToEnd());
-    ref.read(chatRepositoryProvider).markConversationRead(widget.conversationId);
+    ref
+        .read(chatRepositoryProvider)
+        .markConversationRead(widget.conversationId);
 
     _typingChannel = ref.read(chatRepositoryProvider).subscribeTyping(
       widget.conversationId,
@@ -75,14 +81,16 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         setState(() => _someoneTyping = typing);
       },
     );
-    final lr = await ref.read(chatRepositoryProvider).otherLastReadAt(widget.conversationId);
+    final lr = await ref
+        .read(chatRepositoryProvider)
+        .otherLastReadAt(widget.conversationId);
     if (mounted) setState(() => _otherLastRead = lr.valueOrNull);
 
     try {
       final client = ref.read(supabaseClientProvider);
       final conv = await client
           .from('conversations')
-          .select('type, squad_id, title')
+          .select('type, squad_id, community_id, title')
           .eq('id', widget.conversationId)
           .maybeSingle();
       if (conv != null && mounted) {
@@ -93,6 +101,18 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               .eq('id', conv['squad_id'])
               .maybeSingle();
           setState(() => _title = s?['name'] as String? ?? 'Squad Chat');
+        } else if (conv['type'] == 'community' &&
+            conv['community_id'] != null) {
+          final c = await client
+              .from('communities')
+              .select('name, avatar_url')
+              .eq('id', conv['community_id'])
+              .maybeSingle();
+          setState(() {
+            _title = c?['name'] as String? ?? 'Community Chat';
+            _otherAvatarUrl = c?['avatar_url'] as String?;
+            _isCommunityChat = true;
+          });
         } else if (conv['type'] == 'dm') {
           // DMs never get a stored title — the header must be the other
           // participant's real name, not a generic fallback.
@@ -123,8 +143,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         _title = name;
         _otherUserId = row['user_id'] as String?;
         _otherAvatarUrl = p?['avatar_url'] as String?;
-        _otherLastSeen =
-            p?['last_seen'] != null ? DateTime.tryParse(p!['last_seen'] as String) : null;
+        _otherLastSeen = p?['last_seen'] != null
+            ? DateTime.tryParse(p!['last_seen'] as String)
+            : null;
       });
       break;
     }
@@ -141,14 +162,17 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
           .eq('id', uid)
           .maybeSingle();
       if (!mounted) return;
-      final seen = row?['last_seen'] != null ? DateTime.tryParse(row!['last_seen'] as String) : null;
+      final seen = row?['last_seen'] != null
+          ? DateTime.tryParse(row!['last_seen'] as String)
+          : null;
       setState(() => _otherLastSeen = seen);
     });
   }
 
   bool get _otherIsOnline =>
       _otherLastSeen != null &&
-      DateTime.now().toUtc().difference(_otherLastSeen!.toUtc()) < const Duration(minutes: 2);
+      DateTime.now().toUtc().difference(_otherLastSeen!.toUtc()) <
+          const Duration(minutes: 2);
 
   void _scrollToEnd() {
     if (!_scroll.hasClients) return;
@@ -184,7 +208,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         _scrollToEnd();
       },
       failure: (e, _) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$e')));
       },
     );
   }
@@ -198,7 +223,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     );
     if (file == null) return;
     setState(() => _sending = true);
-    final up = await ref.read(chatRepositoryProvider).uploadChatMedia(File(file.path));
+    final up =
+        await ref.read(chatRepositoryProvider).uploadChatMedia(File(file.path));
     if (!mounted) return;
     final url = up.valueOrNull;
     if (url == null) {
@@ -225,6 +251,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         senderId: m.senderId,
         senderName: m.senderName,
         senderAvatar: m.senderAvatar,
+        senderVerified: m.senderVerified,
         body: m.body,
         createdAt: m.createdAt,
         isMine: m.isMine,
@@ -238,12 +265,16 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
 
   Future<void> _toggleMute() async {
     final next = !_muted;
-    await ref.read(chatRepositoryProvider).setConversationMuted(widget.conversationId, next);
+    await ref
+        .read(chatRepositoryProvider)
+        .setConversationMuted(widget.conversationId, next);
     if (!mounted) return;
     setState(() => _muted = next);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(next ? 'Notifications muted' : 'Notifications unmuted')),
+        SnackBar(
+            content:
+                Text(next ? 'Notifications muted' : 'Notifications unmuted')),
       );
     }
   }
@@ -261,6 +292,7 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
         senderId: m.senderId,
         senderName: m.senderName,
         senderAvatar: m.senderAvatar,
+        senderVerified: m.senderVerified,
         body: m.body,
         createdAt: m.createdAt,
         isMine: m.isMine,
@@ -301,13 +333,23 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
             ),
             const Divider(),
             ListTile(
-              leading: Icon(m.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+              leading:
+                  Icon(m.pinned ? Icons.push_pin : Icons.push_pin_outlined),
               title: Text(m.pinned ? 'Unpin message' : 'Pin message'),
               onTap: () {
                 Navigator.pop(ctx);
                 _pinMessage(m);
               },
             ),
+            if (m.isMine)
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete message'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteMessage(m);
+                },
+              ),
             if (!m.isMine)
               ListTile(
                 leading: const Icon(Icons.person_outline),
@@ -324,6 +366,24 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     );
   }
 
+  Future<void> _deleteMessage(MessageEntity message) async {
+    final result =
+        await ref.read(chatRepositoryProvider).deleteMessage(message.id);
+    if (!mounted) return;
+    if (result.isFailure) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.when(
+              success: (_) => 'Delete failed', failure: (e, _) => '$e')),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _messages = _messages.where((m) => m.id != message.id).toList();
+    });
+  }
+
   @override
   void dispose() {
     _channel?.unsubscribe();
@@ -337,10 +397,10 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     super.dispose();
   }
 
-
-
   Future<void> _showParticipants() async {
-    final r = await ref.read(chatRepositoryProvider).listParticipants(widget.conversationId);
+    final r = await ref
+        .read(chatRepositoryProvider)
+        .listParticipants(widget.conversationId);
     if (!mounted) return;
     final rows = r.valueOrNull ?? [];
     showModalBottomSheet(
@@ -355,7 +415,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Members (${rows.length})', style: AppTextStyles.title),
+              child:
+                  Text('Members (${rows.length})', style: AppTextStyles.title),
             ),
             ...rows.map((row) {
               final profile = row['profiles'] as Map?;
@@ -367,7 +428,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               return ListTile(
                 leading: CircleAvatar(
                   backgroundImage: avatar != null ? NetworkImage(avatar) : null,
-                  child: avatar == null ? Text(name.isNotEmpty ? name[0] : '?') : null,
+                  child: avatar == null
+                      ? Text(name.isNotEmpty ? name[0] : '?')
+                      : null,
                 ),
                 title: Text(name),
                 subtitle: Text(role),
@@ -394,19 +457,23 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            if (_otherUserId != null) ...[
+            if (_otherUserId != null || _isCommunityChat) ...[
               GestureDetector(
-                onTap: () => context.push('/user/$_otherUserId'),
+                onTap: _otherUserId == null
+                    ? null
+                    : () => context.push('/user/$_otherUserId'),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     CircleAvatar(
                       radius: 16,
                       backgroundColor: AppColors.surfaceElevated,
-                      backgroundImage:
-                          _otherAvatarUrl != null ? NetworkImage(_otherAvatarUrl!) : null,
+                      backgroundImage: _otherAvatarUrl != null
+                          ? NetworkImage(_otherAvatarUrl!)
+                          : null,
                       child: _otherAvatarUrl == null
-                          ? Text(_title.isNotEmpty ? _title[0].toUpperCase() : '?')
+                          ? Text(
+                              _title.isNotEmpty ? _title[0].toUpperCase() : '?')
                           : null,
                     ),
                     if (_otherIsOnline)
@@ -419,7 +486,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                           decoration: BoxDecoration(
                             color: const Color(0xFF22C55E),
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.background, width: 1.5),
+                            border: Border.all(
+                                color: AppColors.background, width: 1.5),
                           ),
                         ),
                       ),
@@ -435,12 +503,15 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                 children: [
                   Text(
                     _title,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w600),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     _otherUserId != null
-                        ? (_otherIsOnline ? 'Online' : 'Tap & hold a message for reactions')
+                        ? (_otherIsOnline
+                            ? 'Online'
+                            : 'Tap & hold a message for reactions')
                         : 'Tap & hold a message for reactions',
                     style: AppTextStyles.caption.copyWith(
                       fontSize: 11,
@@ -461,7 +532,9 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
             onPressed: _showParticipants,
           ),
           IconButton(
-            icon: Icon(_muted ? Icons.notifications_off_outlined : Icons.notifications_outlined),
+            icon: Icon(_muted
+                ? Icons.notifications_off_outlined
+                : Icons.notifications_outlined),
             tooltip: _muted ? 'Unmute' : 'Mute',
             onPressed: _toggleMute,
           ),
@@ -531,16 +604,20 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               color: AppColors.primary.withValues(alpha: 0.12),
               child: Row(
                 children: [
-                  const Icon(Icons.push_pin, size: 16, color: AppColors.primary),
+                  const Icon(Icons.push_pin,
+                      size: 16, color: AppColors.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       pinned.last.body.isNotEmpty
                           ? pinned.last.body
-                          : (pinned.last.mediaUrl != null ? '📷 Photo' : 'Pinned'),
+                          : (pinned.last.mediaUrl != null
+                              ? '📷 Photo'
+                              : 'Pinned'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption.copyWith(color: AppColors.primary),
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.primary),
                     ),
                   ),
                 ],
@@ -562,7 +639,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : ListView.builder(
                     controller: _scroll,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     itemCount: _messages.length,
                     itemBuilder: (_, i) {
                       final m = _messages[i];
@@ -586,7 +664,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
               padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
               decoration: BoxDecoration(
                 color: AppColors.surface,
-                border: Border(top: BorderSide(color: AppColors.surfaceElevated)),
+                border:
+                    Border(top: BorderSide(color: AppColors.surfaceElevated)),
               ),
               child: Row(
                 children: [
@@ -602,8 +681,8 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
                         hintText: 'Type a message...',
                         filled: true,
                         fillColor: AppColors.surfaceElevated,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
@@ -641,7 +720,6 @@ class _ChatRoomScreenState extends ConsumerState<ChatRoomScreen> {
     );
   }
 }
-
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
@@ -696,111 +774,150 @@ class _MessageBubble extends StatelessWidget {
 
   Widget _bubbleBody(BuildContext context, MessageEntity m) {
     return GestureDetector(
-        onLongPress: onLongPress,
-        onTap: m.isMine ? null : onTapAvatar,
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 3),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.7,
+      onLongPress: onLongPress,
+      onTap: m.isMine ? null : onTapAvatar,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        decoration: BoxDecoration(
+          color: m.isMine ? AppColors.primary : AppColors.surfaceElevated,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(m.isMine ? 16 : 4),
+            bottomRight: Radius.circular(m.isMine ? 4 : 16),
           ),
-          decoration: BoxDecoration(
-            color: m.isMine ? AppColors.primary : AppColors.surfaceElevated,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(m.isMine ? 16 : 4),
-              bottomRight: Radius.circular(m.isMine ? 4 : 16),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!m.isMine) ...[
-                Text(
-                  m.senderName,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-              ],
-              if (m.mediaUrl != null && m.mediaType == 'image') ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    m.mediaUrl!,
-                    width: 220,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
-                  ),
-                ),
-                if (m.body.isNotEmpty && m.body != '📷 Photo') const SizedBox(height: 4),
-              ],
-              if (m.body.isNotEmpty && m.body != '📷 Photo')
-                Text(
-                  m.body,
-                  style: AppTextStyles.body.copyWith(
-                    color: m.isMine ? Colors.white : AppColors.textPrimary,
-                  ),
-                ),
-              const SizedBox(height: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!m.isMine) ...[
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (m.pinned)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Icon(
-                        Icons.push_pin,
-                        size: 12,
-                        color: m.isMine ? Colors.white70 : AppColors.primary,
-                      ),
-                    ),
                   Text(
-                    timeStr,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: m.isMine ? Colors.white70 : AppColors.textMuted,
+                    m.senderName,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  if (m.isMine) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      seen ? Icons.done_all : Icons.done,
-                      size: 14,
-                      color: seen ? const Color(0xFF93C5FD) : Colors.white70,
+                  if (m.senderVerified)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4),
+                      child: KxVerifiedBadge(size: 13),
                     ),
-                  ],
                 ],
               ),
-              if (m.reactions.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  children: m.reactions.entries.map((e) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: (m.isMine ? Colors.white : AppColors.primary)
-                            .withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '${e.key} ${e.value}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: m.isMine ? Colors.white : AppColors.textPrimary,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
+              const SizedBox(height: 2),
             ],
-          ),
+            if (m.mediaUrl != null && m.mediaType == 'image') ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(
+                  m.mediaUrl!,
+                  width: 220,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+                ),
+              ),
+              if (m.body.isNotEmpty && m.body != '📷 Photo')
+                const SizedBox(height: 4),
+            ],
+            if (m.body.isNotEmpty && m.body != '📷 Photo')
+              _MessageBody(body: m.body, mine: m.isMine),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (m.pinned)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.push_pin,
+                      size: 12,
+                      color: m.isMine ? Colors.white70 : AppColors.primary,
+                    ),
+                  ),
+                Text(
+                  timeStr,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: m.isMine ? Colors.white70 : AppColors.textMuted,
+                  ),
+                ),
+                if (m.isMine) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    seen ? Icons.done_all : Icons.done,
+                    size: 14,
+                    color: seen ? const Color(0xFF93C5FD) : Colors.white70,
+                  ),
+                ],
+              ],
+            ),
+            if (m.reactions.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 4,
+                children: m.reactions.entries.map((e) {
+                  return Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (m.isMine ? Colors.white : AppColors.primary)
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '${e.key} ${e.value}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: m.isMine ? Colors.white : AppColors.textPrimary,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _MessageBody extends StatelessWidget {
+  const _MessageBody({required this.body, required this.mine});
+
+  final String body;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final match =
+        RegExp(r'https?://[^\s]+', caseSensitive: false).firstMatch(body);
+    final url = match == null ? null : Uri.tryParse(match.group(0)!);
+    final style = AppTextStyles.body.copyWith(
+      color: mine ? Colors.white : AppColors.textPrimary,
+      decoration: url == null ? TextDecoration.none : TextDecoration.underline,
+    );
+    return GestureDetector(
+      onTap: url == null
+          ? null
+          : () async {
+              if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Unable to open link')),
+                  );
+                }
+              }
+            },
+      child: Text(body, style: style),
+    );
   }
 }

@@ -176,6 +176,14 @@ export async function fetchReportPreview(reportId) {
   return data;
 }
 
+export async function setUserBan(userId, banned) {
+  const { error } = await supabase.rpc("admin_set_ban", {
+    p_user_id: userId,
+    p_banned: banned,
+  });
+  if (error) throw error;
+}
+
 // ---------- users ----------
 export async function listUsers({ limit = 100, query = "" } = {}) {
   const q = query.trim().replace(/[%_,.]/g, " ").trim();

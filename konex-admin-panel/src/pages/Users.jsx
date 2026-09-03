@@ -9,7 +9,7 @@ import {
   searchUsers,
   setUserRole,
   setUserVerified,
-  resolveReport,
+  setUserBan,
   fetchUserModerationContext,
 } from "../lib/hooks";
 
@@ -112,17 +112,13 @@ export default function Users() {
       } else if (action === "verify" || action === "unverify") {
         await setUserVerified(user.id, action === "verify");
       } else if (action === "ban" || action === "restore") {
-        await resolveReport({
-          reportId: "00000000-0000-0000-0000-000000000000",
-          action,
-          targetUserId: user.id,
-          targetType: "profile",
-          targetId: user.id,
-          reason: reason || `Admin ${action}`,
-        });
+        await setUserBan(user.id, action === "ban");
       }
       showToast(`Updated @${user.username}`, "success");
-      runSearch(query);
+      const nextUsers = query.trim().length >= 2
+        ? await searchUsers(query)
+        : await listUsers();
+      setUsers(nextUsers);
       if (detailUser?.id === user.id) {
         openDetail({ ...user });
       }

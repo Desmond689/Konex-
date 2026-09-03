@@ -70,13 +70,15 @@ class StoryRemoteDataSource {
     // Own ring first
     if (byUser.containsKey(uid)) {
       final p = profiles[uid] ?? {};
-      rings.add(StoryRing(
-        userId: uid,
-        displayName: 'Your Story',
-        avatarUrl: p['avatar_url'] as String?,
-        stories: byUser[uid]!,
-        isMe: true,
-      ));
+      rings.add(
+        StoryRing(
+          userId: uid,
+          displayName: 'Your Story',
+          avatarUrl: p['avatar_url'] as String?,
+          stories: byUser[uid]!,
+          isMe: true,
+        ),
+      );
       byUser.remove(uid);
     } else {
       // Empty "Your Story" so user can create
@@ -85,13 +87,15 @@ class StoryRemoteDataSource {
           .select('username, gamer_name, avatar_url')
           .eq('id', uid)
           .maybeSingle();
-      rings.add(StoryRing(
-        userId: uid,
-        displayName: 'Your Story',
-        avatarUrl: me?['avatar_url'] as String?,
-        stories: const [],
-        isMe: true,
-      ));
+      rings.add(
+        StoryRing(
+          userId: uid,
+          displayName: 'Your Story',
+          avatarUrl: me?['avatar_url'] as String?,
+          stories: const [],
+          isMe: true,
+        ),
+      );
     }
 
     for (final entry in byUser.entries) {
@@ -99,13 +103,17 @@ class StoryRemoteDataSource {
       final name = (p['gamer_name'] as String?)?.isNotEmpty == true
           ? p['gamer_name'] as String
           : (p['username'] as String? ?? 'User');
-      rings.add(StoryRing(
-        userId: entry.key,
-        displayName: name,
-        avatarUrl: p['avatar_url'] as String?,
-        stories: entry.value,
-        lastSeen: p['last_seen'] != null ? DateTime.tryParse(p['last_seen'] as String) : null,
-      ));
+      rings.add(
+        StoryRing(
+          userId: entry.key,
+          displayName: name,
+          avatarUrl: p['avatar_url'] as String?,
+          stories: entry.value,
+          lastSeen: p['last_seen'] != null
+              ? DateTime.tryParse(p['last_seen'] as String)
+              : null,
+        ),
+      );
     }
 
     return rings;
@@ -168,16 +176,46 @@ class StoryRemoteDataSource {
   }) async {
     final uid = _uid;
     if (uid == null) throw Exception('Not authenticated');
+    const allowedPrivacy = {'everyone', 'followers', 'friends', 'only_me'};
+    if (!allowedPrivacy.contains(privacy)) {
+      throw ArgumentError.value(
+        privacy,
+        'privacy',
+        'Unsupported story privacy',
+      );
+    }
+    if (mediaType == 'text' &&
+        (textContent == null || textContent.trim().isEmpty)) {
+      throw ArgumentError('Text stories must contain text');
+    }
+    if (mediaType != 'text' && (mediaUrl == null || mediaUrl.trim().isEmpty)) {
+      throw ArgumentError('Media stories must contain a media URL');
+    }
+    if (communityId != null) {
+      final membership = await _client
+          .from('community_members')
+          .select('status')
+          .eq('community_id', communityId)
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (membership?['status'] != 'active') {
+        throw StateError('Join the community before sharing a community story');
+      }
+    }
 
-    final row = await _client.from('stories').insert({
-      'user_id': uid,
-      'media_type': mediaType,
-      'media_url': mediaUrl,
-      'text_content': textContent,
-      'background_color': backgroundColor ?? '#7C3AED',
-      'privacy': privacy,
-      'community_id': communityId,
-    }).select().single();
+    final row = await _client
+        .from('stories')
+        .insert({
+          'user_id': uid,
+          'media_type': mediaType,
+          'media_url': mediaUrl,
+          'text_content': textContent,
+          'background_color': backgroundColor ?? '#7C3AED',
+          'privacy': privacy,
+          'community_id': communityId,
+        })
+        .select()
+        .single();
 
     return StoryEntity(
       id: row['id'] as String,
@@ -199,7 +237,9 @@ class StoryRemoteDataSource {
     if (uid == null) throw Exception('Not authenticated');
     final ext = mediaType == 'video' ? 'mp4' : 'jpg';
     final path = 'stories/$uid/${DateTime.now().millisecondsSinceEpoch}.$ext';
-    await _client.storage.from('media').upload(
+    await _client.storage
+        .from('media')
+        .upload(
           path,
           file,
           fileOptions: FileOptions(
@@ -213,25 +253,23 @@ class StoryRemoteDataSource {
   Future<void> markViewed(String storyId) async {
     final uid = _uid;
     if (uid == null) return;
-    try {
-      await _client.from('story_views').upsert({
-        'story_id': storyId,
-        'viewer_id': uid,
-      });
-      // Best-effort increment
-      await _client.rpc('increment_story_view', params: {'p_story_id': storyId});
-    } catch (_) {
-      // ignore duplicate / missing rpc
-      try {
-        await _client
-            .from('stories')
-            .update({'view_count': 1})
-            .eq('id', storyId);
-      } catch (_) {}
-    }
+    final existing = await _client
+        .from('story_views')
+        .select('story_id')
+        .eq('story_id', storyId)
+        .eq('viewer_id', uid)
+        .maybeSingle();
+    if (existing != null) return;
+    await _client.from('story_views').insert({
+      'story_id': storyId,
+      'viewer_id': uid,
+    });
+    await _client.rpc('increment_story_view', params: {'p_story_id': storyId});
   }
 
   Future<void> deleteStory(String storyId) async {
-    await _client.from('stories').delete().eq('id', storyId);
+    final uid = _uid;
+    if (uid == null) throw StateError('Not authenticated');
+    await _client.from('stories').delete().eq('id', storyId).eq('user_id', uid);
   }
 }

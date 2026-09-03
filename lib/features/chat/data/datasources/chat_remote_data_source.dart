@@ -14,6 +14,61 @@ class ChatRemoteDataSource {
     return id;
   }
 
+  Future<String> getOrCreateCommunityChat(String communityId) async {
+    final membership = await _client
+        .from('community_members')
+        .select('status')
+        .eq('community_id', communityId)
+        .eq('user_id', _uid)
+        .maybeSingle();
+    if (membership?['status'] != 'active') {
+      throw StateError('Join the community to use chat');
+    }
+    final existing = await _client
+        .from('conversations')
+        .select('id')
+        .eq('type', 'community')
+        .eq('community_id', communityId)
+        .maybeSingle();
+    if (existing != null) {
+      await _ensureCommunityParticipant(existing['id'] as String, communityId);
+      return existing['id'] as String;
+    }
+
+    final conv = await _client
+        .from('conversations')
+        .insert({
+          'type': 'community',
+          'community_id': communityId,
+          'created_by': _uid,
+        })
+        .select()
+        .single();
+    final convId = conv['id'] as String;
+    await _ensureCommunityParticipant(convId, communityId);
+    return convId;
+  }
+
+  Future<void> _ensureCommunityParticipant(
+    String conversationId,
+    String communityId,
+  ) async {
+    final members = await _client
+        .from('community_members')
+        .select('user_id')
+        .eq('community_id', communityId)
+        .eq('status', 'active');
+    final rows = (members as List)
+        .map((m) => {
+              'conversation_id': conversationId,
+              'user_id': m['user_id'],
+            })
+        .toList();
+    if (rows.isNotEmpty) {
+      await _client.from('conversation_participants').upsert(rows);
+    }
+  }
+
   /// Open or reuse a DM conversation with [otherUserId]. Blocks prevent messaging.
   Future<String> getOrCreateDm(String otherUserId) async {
     if (otherUserId == _uid) throw StateError('Cannot DM yourself');
@@ -50,9 +105,13 @@ class ChatRemoteDataSource {
       }
     }
 
-    final conv = await _client.from('conversations').insert({
-      'type': 'dm',
-    }).select().single();
+    final conv = await _client
+        .from('conversations')
+        .insert({
+          'type': 'dm',
+        })
+        .select()
+        .single();
 
     final convId = conv['id'] as String;
     await _client.from('conversation_participants').insert([
@@ -67,15 +126,19 @@ class ChatRemoteDataSource {
     required String title,
     required List<String> memberIds,
   }) async {
-    final members = { _uid, ...memberIds }.toList();
+    final members = {_uid, ...memberIds}.toList();
     if (members.length < 2) {
       throw StateError('Group needs at least 2 members');
     }
-    final row = await _client.from('conversations').insert({
-      'type': 'group',
-      'title': title.trim().isEmpty ? 'Group chat' : title.trim(),
-      'created_by': _uid,
-    }).select().single();
+    final row = await _client
+        .from('conversations')
+        .insert({
+          'type': 'group',
+          'title': title.trim().isEmpty ? 'Group chat' : title.trim(),
+          'created_by': _uid,
+        })
+        .select()
+        .single();
     final convId = row['id'] as String;
     await _client.from('conversation_participants').insert([
       for (final uid in members)
@@ -88,14 +151,17 @@ class ChatRemoteDataSource {
     return convId;
   }
 
-  Future<List<Map<String, dynamic>>> listParticipants(String conversationId) async {
+  Future<List<Map<String, dynamic>>> listParticipants(
+      String conversationId) async {
     final rows = await _client
         .from('conversation_participants')
         .select(
           'user_id, role, profiles!conversation_participants_user_id_fkey(username, gamer_name, avatar_url)',
         )
         .eq('conversation_id', conversationId);
-    return (rows as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    return (rows as List)
+        .map((r) => Map<String, dynamic>.from(r as Map))
+        .toList();
   }
 
   Future<String> getOrCreateSquadChat(String squadId) async {
@@ -107,10 +173,14 @@ class ChatRemoteDataSource {
         .maybeSingle();
     if (existing != null) return existing['id'] as String;
 
-    final conv = await _client.from('conversations').insert({
-      'type': 'squad',
-      'squad_id': squadId,
-    }).select().single();
+    final conv = await _client
+        .from('conversations')
+        .insert({
+          'type': 'squad',
+          'squad_id': squadId,
+        })
+        .select()
+        .single();
     final convId = conv['id'] as String;
 
     final members = await _client
@@ -133,14 +203,19 @@ class ChatRemoteDataSource {
   Future<List<ConversationEntity>> listInbox() async {
     final parts = await _client
         .from('conversation_participants')
-        .select('conversation_id, last_read_at, pinned, muted, archived, unread_count')
+        .select(
+            'conversation_id, last_read_at, pinned, muted, archived, unread_count')
         .eq('user_id', _uid)
         .eq('archived', false);
 
     final list = <ConversationEntity>[];
     for (final p in parts as List) {
       final convId = p['conversation_id'] as String;
-      final conv = await _client.from('conversations').select().eq('id', convId).maybeSingle();
+      final conv = await _client
+          .from('conversations')
+          .select()
+          .eq('id', convId)
+          .maybeSingle();
       if (conv == null) continue;
 
       final lastMsg = await _client
@@ -155,10 +230,12 @@ class ChatRemoteDataSource {
       String? title;
       String? otherUserId;
       String? avatarUrl;
+      var conversationVerified = false;
       if (conv['type'] == 'dm') {
         final others = await _client
             .from('conversation_participants')
-            .select('user_id, profiles!conversation_participants_user_id_fkey(username, gamer_name, avatar_url)')
+            .select(
+                'user_id, profiles!conversation_participants_user_id_fkey(username, gamer_name, avatar_url, is_verified)')
             .eq('conversation_id', convId)
             .neq('user_id', _uid)
             .limit(1)
@@ -166,10 +243,20 @@ class ChatRemoteDataSource {
         if (others != null) {
           otherUserId = others['user_id'] as String?;
           final profile = others['profiles'] as Map<String, dynamic>?;
-          title = (profile?['gamer_name'] as String?)?.isNotEmpty == true
-              ? profile!['gamer_name'] as String
-              : profile?['username'] as String? ?? 'User';
-          avatarUrl = profile?['avatar_url'] as String?;
+          final fallback = profile == null && otherUserId != null
+              ? await _client
+                  .from('profiles')
+                  .select('username, gamer_name, avatar_url, is_verified')
+                  .eq('id', otherUserId)
+                  .maybeSingle()
+              : null;
+          final resolvedProfile = profile ?? fallback;
+          title =
+              (resolvedProfile?['gamer_name'] as String?)?.isNotEmpty == true
+                  ? resolvedProfile!['gamer_name'] as String
+                  : resolvedProfile?['username'] as String? ?? 'User';
+          avatarUrl = resolvedProfile?['avatar_url'] as String?;
+          conversationVerified = resolvedProfile?['is_verified'] == true;
         }
       } else if (conv['type'] == 'group') {
         title = (conv['title'] as String?)?.isNotEmpty == true
@@ -183,6 +270,14 @@ class ChatRemoteDataSource {
             .maybeSingle();
         title = squad?['name'] as String? ?? 'Squad chat';
         avatarUrl = squad?['logo_url'] as String?;
+      } else if (conv['community_id'] != null) {
+        final community = await _client
+            .from('communities')
+            .select('name, avatar_url')
+            .eq('id', conv['community_id'])
+            .maybeSingle();
+        title = community?['name'] as String? ?? 'Community chat';
+        avatarUrl = community?['avatar_url'] as String?;
       }
 
       final unread = (p['unread_count'] as int?) ?? 0;
@@ -190,9 +285,11 @@ class ChatRemoteDataSource {
         id: convId,
         type: conv['type'] as String,
         squadId: conv['squad_id'] as String?,
+        communityId: conv['community_id'] as String?,
         title: title,
         avatarUrl: avatarUrl,
         otherUserId: otherUserId,
+        isVerified: conversationVerified,
         lastMessage: lastMsg?['body'] as String?,
         lastMessageAt: lastMsg != null
             ? DateTime.tryParse(lastMsg['created_at'] as String? ?? '')
@@ -214,12 +311,13 @@ class ChatRemoteDataSource {
     return list;
   }
 
-  Future<List<MessageEntity>> getMessages(String conversationId, {int limit = 50}) async {
+  Future<List<MessageEntity>> getMessages(String conversationId,
+      {int limit = 50}) async {
     final rows = await _client
         .from('messages')
         .select('''
           id, conversation_id, sender_id, body, created_at, media_url, media_type, pinned,
-          profiles!messages_sender_id_fkey ( username, gamer_name, avatar_url )
+          profiles!messages_sender_id_fkey ( username, gamer_name, avatar_url, is_verified )
         ''')
         .eq('conversation_id', conversationId)
         .eq('is_deleted', false)
@@ -238,6 +336,7 @@ class ChatRemoteDataSource {
         senderId: m['sender_id'] as String,
         senderName: name,
         senderAvatar: p?['avatar_url'] as String?,
+        senderVerified: p?['is_verified'] == true,
         body: m['body'] as String? ?? '',
         createdAt: DateTime.parse(m['created_at'] as String),
         isMine: m['sender_id'] == _uid,
@@ -269,6 +368,7 @@ class ChatRemoteDataSource {
                   senderId: m.senderId,
                   senderName: m.senderName,
                   senderAvatar: m.senderAvatar,
+                  senderVerified: m.senderVerified,
                   body: m.body,
                   createdAt: m.createdAt,
                   isMine: m.isMine,
@@ -299,7 +399,7 @@ class ChatRemoteDataSource {
       if (mediaType != null) 'media_type': mediaType,
     }).select('''
       id, conversation_id, sender_id, body, created_at, media_url, media_type, pinned,
-      profiles!messages_sender_id_fkey ( username, gamer_name, avatar_url )
+      profiles!messages_sender_id_fkey ( username, gamer_name, avatar_url, is_verified )
     ''').single();
 
     final m = Map<String, dynamic>.from(row);
@@ -313,6 +413,7 @@ class ChatRemoteDataSource {
       senderId: m['sender_id'] as String,
       senderName: name,
       senderAvatar: p?['avatar_url'] as String?,
+      senderVerified: p?['is_verified'] == true,
       body: m['body'] as String? ?? '',
       createdAt: DateTime.parse(m['created_at'] as String),
       isMine: true,
@@ -324,18 +425,32 @@ class ChatRemoteDataSource {
 
   Future<String> uploadChatMedia(File file) async {
     final uid = _uid;
-    if (uid == null) throw Exception('Not authenticated');
     final path = 'chat/$uid/${DateTime.now().millisecondsSinceEpoch}.jpg';
     await _client.storage.from('media').upload(
           path,
           file,
-          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+          fileOptions:
+              const FileOptions(contentType: 'image/jpeg', upsert: true),
         );
     return _client.storage.from('media').getPublicUrl(path);
   }
 
   Future<void> pinMessage(String messageId, bool pinned) async {
-    await _client.from('messages').update({'pinned': pinned}).eq('id', messageId);
+    await _client
+        .from('messages')
+        .update({'pinned': pinned}).eq('id', messageId);
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    await _client
+        .from('messages')
+        .update({
+          'is_deleted': true,
+          'body': 'This message was deleted',
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', messageId)
+        .eq('sender_id', _uid);
   }
 
   RealtimeChannel subscribeMessages(
@@ -358,7 +473,7 @@ class ChatRemoteDataSource {
             if (m['sender_id'] == _uid) return;
             final profile = await _client
                 .from('profiles')
-                .select('username, gamer_name, avatar_url')
+                .select('username, gamer_name, avatar_url, is_verified')
                 .eq('id', m['sender_id'] as String)
                 .maybeSingle();
             final name = (profile?['gamer_name'] as String?)?.isNotEmpty == true
@@ -370,6 +485,7 @@ class ChatRemoteDataSource {
               senderId: m['sender_id'] as String,
               senderName: name,
               senderAvatar: profile?['avatar_url'] as String?,
+              senderVerified: profile?['is_verified'] == true,
               body: m['body'] as String? ?? '',
               createdAt: DateTime.parse(m['created_at'] as String),
               isMine: false,
@@ -381,28 +497,44 @@ class ChatRemoteDataSource {
   }
 
   Future<void> setConversationPinned(String conversationId, bool pinned) async {
-    await _client.from('conversation_participants').update({
-      'pinned': pinned,
-    }).eq('conversation_id', conversationId).eq('user_id', _uid);
+    await _client
+        .from('conversation_participants')
+        .update({
+          'pinned': pinned,
+        })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', _uid);
   }
 
   Future<void> setConversationMuted(String conversationId, bool muted) async {
-    await _client.from('conversation_participants').update({
-      'muted': muted,
-    }).eq('conversation_id', conversationId).eq('user_id', _uid);
+    await _client
+        .from('conversation_participants')
+        .update({
+          'muted': muted,
+        })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', _uid);
   }
 
   Future<void> archiveConversation(String conversationId) async {
-    await _client.from('conversation_participants').update({
-      'archived': true,
-    }).eq('conversation_id', conversationId).eq('user_id', _uid);
+    await _client
+        .from('conversation_participants')
+        .update({
+          'archived': true,
+        })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', _uid);
   }
 
   Future<void> markConversationRead(String conversationId) async {
-    await _client.from('conversation_participants').update({
-      'unread_count': 0,
-      'last_read_at': DateTime.now().toIso8601String(),
-    }).eq('conversation_id', conversationId).eq('user_id', _uid);
+    await _client
+        .from('conversation_participants')
+        .update({
+          'unread_count': 0,
+          'last_read_at': DateTime.now().toIso8601String(),
+        })
+        .eq('conversation_id', conversationId)
+        .eq('user_id', _uid);
   }
 
   Future<void> reactToMessage(String messageId, String emoji) async {

@@ -7,6 +7,7 @@ class PostEntity extends Equatable {
     required this.authorUsername,
     this.authorGamerName,
     this.authorAvatarUrl,
+    this.authorVerified = false,
     this.communityId,
     this.communityName,
     this.squadId,
@@ -31,6 +32,7 @@ class PostEntity extends Equatable {
   final String authorUsername;
   final String? authorGamerName;
   final String? authorAvatarUrl;
+  final bool authorVerified;
   final String? communityId;
   final String? communityName;
   final String? squadId;
@@ -46,6 +48,7 @@ class PostEntity extends Equatable {
   final bool savedByMe;
   final bool isAnnouncement;
   final bool isPinned;
+
   /// Role of the author within [squadId], when known ('owner' | 'moderator' | 'member').
   final String? authorSquadRole;
   final DateTime createdAt;
@@ -90,6 +93,7 @@ class PostEntity extends Equatable {
       authorUsername: authorUsername,
       authorGamerName: authorGamerName,
       authorAvatarUrl: authorAvatarUrl,
+      authorVerified: authorVerified,
       communityId: communityId,
       communityName: communityName,
       squadId: squadId,
@@ -122,6 +126,7 @@ class CommentEntity extends Equatable {
     required this.authorId,
     required this.authorUsername,
     this.authorAvatarUrl,
+    this.authorVerified = false,
     this.parentId,
     this.body = '',
     this.mediaUrl,
@@ -138,6 +143,7 @@ class CommentEntity extends Equatable {
   final String authorId;
   final String authorUsername;
   final String? authorAvatarUrl;
+  final bool authorVerified;
   final String? parentId;
   final String body;
   final String? mediaUrl;
@@ -159,6 +165,7 @@ class CommentEntity extends Equatable {
         authorId: authorId,
         authorUsername: authorUsername,
         authorAvatarUrl: authorAvatarUrl,
+        authorVerified: authorVerified,
         parentId: parentId,
         body: body,
         mediaUrl: mediaUrl,

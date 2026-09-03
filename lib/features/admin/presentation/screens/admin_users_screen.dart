@@ -103,14 +103,18 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
     } else if (action == 'verify' || action == 'unverify') {
       await repo.setUserVerified(id, action == 'verify');
     } else if (action == 'ban' || action == 'restore') {
-      await repo.resolveReport(
-        reportId: '00000000-0000-0000-0000-000000000000',
-        action: action,
-        targetUserId: id,
-        targetType: 'profile',
-        targetId: id,
-        reason: 'Admin $action',
+      final result = await repo.setUserBan(id, action == 'ban');
+      String? banError;
+      result.when(
+        success: (_) {},
+        failure: (error, _) => banError = error.toString(),
       );
+      if (banError != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(banError!)),
+        );
+        return;
+      }
     }
     await _search(_query.text);
   }
