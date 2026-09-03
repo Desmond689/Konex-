@@ -4,6 +4,7 @@ import ConstellationField from '../components/ConstellationField'
 
 const APP_STORE_URL = 'https://apps.apple.com/app/konex'
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.konex.app'
+const ANDROID_BUILD_URL = 'https://github.com/Desmond689/konex-app/actions/runs/33708949560/artifacts/9876457239'
 
 const features = [
   ['01', 'Discover gamers', 'Find people who play the games you love and connect with players from different communities.'],
@@ -24,7 +25,7 @@ export default function About() {
           <div className="nav-links">
             <Link to="/">Home</Link>
             <a href="#what-you-can-do">What you can do</a>
-            <a href={PLAY_STORE_URL} className="btn btn-primary">Download app</a>
+            <a href={ANDROID_BUILD_URL} className="btn btn-primary" download>Download app</a>
           </div>
         </nav>
       </div>
@@ -70,7 +71,7 @@ export default function About() {
           <p>Your squad is waiting.</p>
           <div className="hero-ctas">
             <a href={APP_STORE_URL} className="btn btn-primary">Download for iOS</a>
-            <a href={PLAY_STORE_URL} className="btn btn-ghost">Download for Android</a>
+            <a href={ANDROID_BUILD_URL} className="btn btn-ghost" download>Download for Android</a>
           </div>
         </section>
       </main>

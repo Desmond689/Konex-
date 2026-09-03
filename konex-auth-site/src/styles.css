@@ -386,6 +386,30 @@ button {
 .about-download h2 { font-family: var(--font-display); font-size: 34px; margin: 0; }
 .about-download p { color: rgba(255,255,255,.78); margin: 10px 0 24px; }
 .about-download .hero-ctas { justify-content: center; margin: 0; }
+.android-install {
+  position: relative;
+  z-index: 2;
+  padding: 56px 0;
+  border-top: 1px solid var(--line);
+}
+.android-install h2 {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4vw, 42px);
+  margin: 14px 0;
+}
+.android-install p, .android-install li {
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.android-install > p { max-width: 62ch; }
+.android-install ol {
+  max-width: 720px;
+  margin: 24px 0;
+  padding-left: 24px;
+}
+.android-install li { padding: 5px 0 5px 8px; }
+.android-install strong { color: var(--text); }
+.android-install .install-note { color: var(--text-faint); font-size: 13px; }
 
 @media (max-width: 700px) {
   .nav-links a:not(.btn) { display: none; }

@@ -2,7 +2,8 @@
 
 A small React + Vite site for **Konex**:
 
-- `/` — landing page with the logo, a short pitch, and download links
+- `/` — landing page with the logo, a short pitch, Android APK download, and installation instructions
+- `/about` — About Konex, its vision, features, and download links
 - `/auth/callback` — the page Supabase redirects to after someone taps an
   email confirmation link. Shows **"Email verified successfully"** on
   success, a clear error state on a bad/expired link, and buttons to open
