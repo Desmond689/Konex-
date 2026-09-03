@@ -72,6 +72,28 @@ class AuthGuard {
       return Routes.login;
     }
 
+    // Banned accounts must never reach the application shell. Check the
+    // server flag on every redirect so an admin unban takes effect without
+    // requiring a reinstall or a stale local cache.
+    try {
+      final client = ref.read(supabaseClientProvider);
+      final uid = client.auth.currentUser?.id;
+      if (uid != null) {
+        final profile = await client
+            .from('profiles')
+            .select('is_banned')
+            .eq('id', uid)
+            .maybeSingle()
+            .timeout(const Duration(seconds: 6));
+        final isBanned = profile?['is_banned'] as bool? ?? false;
+        if (isBanned && loc != Routes.suspended) return Routes.suspended;
+        if (!isBanned && loc == Routes.suspended) return Routes.home;
+      }
+    } catch (_) {
+      // Preserve normal navigation during a transient network failure. The
+      // server-side policies still protect banned accounts' data and actions.
+    }
+
     // Logged in but onboarding incomplete
     if (!onboardingDone && loc != Routes.onboarding) {
       return Routes.onboarding;

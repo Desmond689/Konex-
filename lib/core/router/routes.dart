@@ -7,6 +7,7 @@ abstract final class Routes {
   static const String emailVerification = '/email-verification';
   static const String forgotPassword = '/forgot-password';
   static const String resetPassword = '/reset-password';
+  static const String suspended = '/suspended';
 
   static const String home = '/home';
   static const String discover = '/discover';

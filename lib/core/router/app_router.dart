@@ -9,6 +9,7 @@ import '../../features/auth/presentation/screens/splash_screen.dart';
 import '../../features/auth/presentation/screens/onboarding_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
 import '../../features/auth/presentation/screens/reset_password_screen.dart';
+import '../../features/auth/presentation/screens/suspended_screen.dart';
 import '../../features/feed/presentation/screens/home_feed_screen.dart';
 import '../../features/profile/presentation/screens/profile_screen.dart';
 import '../../features/profile/presentation/screens/edit_profile_screen.dart';
@@ -63,6 +64,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.onboarding, builder: (_, __) => const OnboardingScreen()),
       GoRoute(path: Routes.forgotPassword, builder: (_, __) => const ForgotPasswordScreen()),
       GoRoute(path: Routes.resetPassword, builder: (_, __) => const ResetPasswordScreen()),
+      GoRoute(path: Routes.suspended, builder: (_, __) => const SuspendedScreen()),
 
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
